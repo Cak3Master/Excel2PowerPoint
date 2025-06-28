@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel to PowerPoint Converter</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Excel to PowerPoint Converter</h1>
+            <p>Upload your Excel workbook and convert each sheet to a PowerPoint slide</p>
+        </header>
+
+        <main>
+            {% with messages = get_flashed_messages() %}
+                {% if messages %}
+                    <div class="messages">
+                        {% for message in messages %}
+                            <div class="alert alert-error">{{ message }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
+            <div class="upload-section">
+                <form method="post" enctype="multipart/form-data" class="upload-form">
+                    <div class="file-input-wrapper">
+                        <input type="file" id="file" name="file" accept=".xlsx" required>
+                        <label for="file" class="file-input-label">
+                            <span class="file-icon">📄</span>
+                            <span class="file-text">Choose Excel File (.xlsx)</span>
+                        </label>
+                    </div>
+                    
+                    <button type="submit" class="convert-btn">
+                        <span class="btn-icon">🔄</span>
+                        Convert to PowerPoint
+                    </button>
+                </form>
+                
+                <!-- Progress Bar (hidden initially) -->
+                <div class="progress-container" style="display: none;">
+                    <div class="progress-info">
+                        <span class="progress-text">Converting...</span>
+                        <span class="progress-percentage">0%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill"></div>
+                    </div>
+                    <div class="progress-status">Initializing conversion...</div>
+                </div>
+            </div>
+
+            <div class="features">
+                <h2>Supported Features</h2>
+                <div class="feature-grid">
+                    <div class="feature-item">
+                        <span class="feature-icon">📊</span>
+                        <h3>Multiple Sheets</h3>
+                        <p>Each worksheet becomes a separate slide</p>
+                    </div>
+                    <div class="feature-item">
+                        <span class="feature-icon">🎨</span>
+                        <h3>Formatting</h3>
+                        <p>Preserves colors, fonts, and cell styling</p>
+                    </div>
+                    <div class="feature-item">
+                        <span class="feature-icon">🔗</span>
+                        <h3>Merged Cells</h3>
+                        <p>Handles complex table structures</p>
+                    </div>
+                    <div class="feature-item">
+                        <span class="feature-icon">📏</span>
+                        <h3>Auto-sizing</h3>
+                        <p>Tables fit perfectly within slide boundaries</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="instructions">
+                <h2>How to Use</h2>
+                <ol>
+                    <li>Click "Choose Excel File" and select your .xlsx file</li>
+                    <li>Click "Convert to PowerPoint" to start the conversion</li>
+                    <li>Your converted PowerPoint file will download automatically</li>
+                    <li>Each worksheet will appear as a separate slide with preserved formatting</li>
+                </ol>
+            </div>
+        </main>
+
+        <footer>
+            <p>Maximum file size: 16MB | Supported format: Excel (.xlsx)</p>
+        </footer>
+    </div>
+
+    <script>
+        // Update file input label when file is selected
+        document.getElementById('file').addEventListener('change', function(e) {
+            const fileName = e.target.files[0]?.name;
+            const label = document.querySelector('.file-text');
+            if (fileName) {
+                label.textContent = fileName;
+            } else {
+                label.textContent = 'Choose Excel File (.xlsx)';
+            }
+        });
+
+        // Show progress bar when form is submitted
+        document.querySelector('.upload-form').addEventListener('submit', function(e) {
+            e.preventDefault(); // Prevent default form submission
+            
+            const button = document.querySelector('.convert-btn');
+            const progressContainer = document.querySelector('.progress-container');
+            const progressFill = document.querySelector('.progress-fill');
+            const progressPercentage = document.querySelector('.progress-percentage');
+            const progressStatus = document.querySelector('.progress-status');
+            const originalContent = button.innerHTML;
+            
+            // Disable button and show progress
+            button.disabled = true;
+            button.innerHTML = '<span class="btn-icon">⏳</span>Converting...';
+            progressContainer.style.display = 'block';
+            
+            // Create FormData and submit via fetch
+            const formData = new FormData();
+            const fileInput = document.getElementById('file');
+            formData.append('file', fileInput.files[0]);
+            
+            // Start progress tracking
+            startProgressTracking();
+            
+            // Submit the form
+            fetch('/', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (response.ok) {
+                    // Handle file download
+                    return response.blob().then(blob => {
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = response.headers.get('Content-Disposition')?.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)?.[1]?.replace(/['"]/g, '') || 'converted.pptx';
+                        document.body.appendChild(a);
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        document.body.removeChild(a);
+                        
+                        // Complete progress
+                        updateProgress(100, 'Download complete!');
+                        setTimeout(() => resetForm(), 2000);
+                    });
+                } else {
+                    throw new Error('Conversion failed');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                progressStatus.textContent = 'Error occurred during conversion';
+                setTimeout(() => resetForm(), 3000);
+            });
+            
+            function startProgressTracking() {
+                let progress = 0;
+                let stage = 0;
+                const stages = [
+                    'Reading Excel file...',
+                    'Processing worksheets...',
+                    'Creating PowerPoint slides...',
+                    'Formatting tables...',
+                    'Applying styles...',
+                    'Optimizing layout...',
+                    'Finalizing...'
+                ];
+                
+                const interval = setInterval(() => {
+                    // More realistic progress increments
+                    if (progress < 20) {
+                        progress += Math.random() * 8 + 2; // Fast start (2-10)
+                    } else if (progress < 60) {
+                        progress += Math.random() * 6 + 1; // Steady middle (1-7)
+                    } else if (progress < 85) {
+                        progress += Math.random() * 4 + 1; // Slower near end (1-5)
+                    } else if (progress < 95) {
+                        progress += Math.random() * 2 + 0.5; // Very slow near finish (0.5-2.5)
+                    }
+                    
+                    // Update stage based on progress
+                    const newStage = Math.min(Math.floor(progress / 15), stages.length - 1);
+                    if (newStage !== stage) {
+                        stage = newStage;
+                    }
+                    
+                    if (progress >= 95) {
+                        progress = 95;
+                        clearInterval(interval);
+                        updateProgress(progress, 'Finalizing...');
+                    } else {
+                        updateProgress(Math.min(progress, 95), stages[stage]);
+                    }
+                }, 300); // Faster updates for smoother animation
+            }
+            
+            function updateProgress(percent, status) {
+                progressFill.style.width = percent + '%';
+                progressPercentage.textContent = Math.round(percent) + '%';
+                progressStatus.textContent = status;
+            }
+            
+            function resetForm() {
+                button.disabled = false;
+                button.innerHTML = originalContent;
+                progressContainer.style.display = 'none';
+                progressFill.style.width = '0%';
+                progressPercentage.textContent = '0%';
+                progressStatus.textContent = 'Initializing conversion...';
+            }
+        });
+
+        // Reset button state when page loads/reloads (handles successful downloads)
+        window.addEventListener('load', function() {
+            const button = document.querySelector('.convert-btn');
+            if (button.disabled) {
+                button.disabled = false;
+                button.innerHTML = '<span class="btn-icon">🔄</span>Convert to PowerPoint';
+            }
+        });
+
+        // Reset button state when user navigates back to page
+        window.addEventListener('pageshow', function(event) {
+            if (event.persisted) {
+                const button = document.querySelector('.convert-btn');
+                button.disabled = false;
+                button.innerHTML = '<span class="btn-icon">🔄</span>Convert to PowerPoint';
+            }
+        });
+    </script>
+</body>
+</html>
