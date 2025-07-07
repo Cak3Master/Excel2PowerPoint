@@ -228,18 +228,20 @@ def get_all_visible_data_cells(worksheet):
     # Debug: Check for hidden rows and columns
     print("Checking for hidden rows and columns...")
     for row_num in range(1, max_search_row + 1):
-        if hasattr(worksheet.row_dimensions[row_num], 'hidden') and worksheet.row_dimensions[row_num].hidden:
+        row_dim = worksheet.row_dimensions[row_num]
+        if hasattr(row_dim, 'hidden') and row_dim.hidden:
             hidden_rows_found += 1
         # Also check for zero height (another way rows can be hidden)
-        elif hasattr(worksheet.row_dimensions[row_num], 'height') and worksheet.row_dimensions[row_num].height == 0:
+        elif hasattr(row_dim, 'height') and row_dim.height is not None and row_dim.height == 0:
             hidden_rows_found += 1
     
     for col_num in range(1, max_search_col + 1):
         col_letter = get_column_letter(col_num)
-        if hasattr(worksheet.column_dimensions[col_letter], 'hidden') and worksheet.column_dimensions[col_letter].hidden:
+        col_dim = worksheet.column_dimensions[col_letter]
+        if hasattr(col_dim, 'hidden') and col_dim.hidden:
             hidden_cols_found += 1
         # Also check for zero width (another way columns can be hidden)
-        elif hasattr(worksheet.column_dimensions[col_letter], 'width') and worksheet.column_dimensions[col_letter].width == 0:
+        elif hasattr(col_dim, 'width') and col_dim.width is not None and col_dim.width == 0:
             hidden_cols_found += 1
     
     print(f"Found {hidden_rows_found} hidden rows and {hidden_cols_found} hidden columns")
@@ -247,7 +249,14 @@ def get_all_visible_data_cells(worksheet):
     for row_num in range(1, max_search_row + 1):
         # Skip hidden rows entirely - check both hidden property and zero height
         row_dim = worksheet.row_dimensions[row_num]
-        is_row_hidden = (hasattr(row_dim, 'hidden') and row_dim.hidden) or (hasattr(row_dim, 'height') and row_dim.height == 0)
+        is_row_hidden = False
+        
+        # Check if row is hidden via hidden property
+        if hasattr(row_dim, 'hidden') and row_dim.hidden:
+            is_row_hidden = True
+        # Check if row is hidden via zero height
+        elif hasattr(row_dim, 'height') and row_dim.height is not None and row_dim.height == 0:
+            is_row_hidden = True
         
         if is_row_hidden:
             continue
@@ -256,7 +265,14 @@ def get_all_visible_data_cells(worksheet):
             # Skip hidden columns entirely - check both hidden property and zero width
             col_letter = get_column_letter(col_num)
             col_dim = worksheet.column_dimensions[col_letter]
-            is_col_hidden = (hasattr(col_dim, 'hidden') and col_dim.hidden) or (hasattr(col_dim, 'width') and col_dim.width == 0)
+            is_col_hidden = False
+            
+            # Check if column is hidden via hidden property
+            if hasattr(col_dim, 'hidden') and col_dim.hidden:
+                is_col_hidden = True
+            # Check if column is hidden via zero width
+            elif hasattr(col_dim, 'width') and col_dim.width is not None and col_dim.width == 0:
+                is_col_hidden = True
             
             if is_col_hidden:
                 continue
