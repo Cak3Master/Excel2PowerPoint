@@ -128,8 +128,12 @@
             const fileInput = document.getElementById('file');
             formData.append('file', fileInput.files[0]);
             
+            // Generate session ID for progress tracking
+            const sessionId = Date.now().toString();
+            formData.append('session_id', sessionId);
+            
             // Start progress tracking
-            startProgressTracking();
+            startProgressTracking(sessionId);
             
             // Submit the form
             fetch('/', {
@@ -163,33 +167,48 @@
                 setTimeout(() => resetForm(), 3000);
             });
             
-            function startProgressTracking() {
+            function startProgressTracking(sessionId) {
+                let progressInterval;
+                
+                function checkProgress() {
+                    fetch(`/progress/${sessionId}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            updateProgress(data.percent, data.status);
+                            
+                            if (data.percent >= 100) {
+                                clearInterval(progressInterval);
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Progress tracking error:', error);
+                            // Fallback to basic progress if real progress fails
+                            clearInterval(progressInterval);
+                            startFallbackProgress();
+                        });
+                }
+                
+                // Check progress every 500ms
+                progressInterval = setInterval(checkProgress, 500);
+                
+                // Initial check
+                checkProgress();
+            }
+            
+            function startFallbackProgress() {
                 let progress = 0;
-                let stage = 0;
                 const stages = [
-                    'Reading Excel file...',
-                    'Processing worksheets...',
-                    'Creating PowerPoint slides...',
-                    'Formatting tables...',
-                    'Applying styles...',
-                    'Optimizing layout...',
+                    'Processing Excel file...',
+                    'Converting worksheets...',
+                    'Creating PowerPoint...',
                     'Finalizing...'
                 ];
+                let stage = 0;
                 
                 const interval = setInterval(() => {
-                    // More realistic progress increments
-                    if (progress < 20) {
-                        progress += Math.random() * 8 + 2; // Fast start (2-10)
-                    } else if (progress < 60) {
-                        progress += Math.random() * 6 + 1; // Steady middle (1-7)
-                    } else if (progress < 85) {
-                        progress += Math.random() * 4 + 1; // Slower near end (1-5)
-                    } else if (progress < 95) {
-                        progress += Math.random() * 2 + 0.5; // Very slow near finish (0.5-2.5)
-                    }
+                    progress += Math.random() * 3 + 1;
                     
-                    // Update stage based on progress
-                    const newStage = Math.min(Math.floor(progress / 15), stages.length - 1);
+                    const newStage = Math.min(Math.floor(progress / 25), stages.length - 1);
                     if (newStage !== stage) {
                         stage = newStage;
                     }
@@ -201,7 +220,7 @@
                     } else {
                         updateProgress(Math.min(progress, 95), stages[stage]);
                     }
-                }, 300); // Faster updates for smoother animation
+                }, 800);
             }
             
             function updateProgress(percent, status) {

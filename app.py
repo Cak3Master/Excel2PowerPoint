@@ -1,6 +1,9 @@
-from flask import Flask, request, render_template, send_file, flash, redirect, url_for
+from flask import Flask, request, render_template, send_file, flash, redirect, url_for, jsonify, Response
 import os
 import io
+import json
+import threading
+import time
 from werkzeug.utils import secure_filename
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill, Font, Border
@@ -17,6 +20,10 @@ app.config['SECRET_KEY'] = 'excel-to-ppt-converter-secret-key'
 app.config['UPLOAD_FOLDER'] = tempfile.gettempdir()
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
+# Progress tracking
+progress_data = {}
+progress_lock = threading.Lock()
+
 ALLOWED_EXTENSIONS = {'xlsx'}
 
 def allowed_file(filename):
@@ -24,15 +31,120 @@ def allowed_file(filename):
 
 def rgb_to_hex(rgb_str):
     """Convert RGB string to hex color"""
-    if not rgb_str or rgb_str == '00000000':
+    if not rgb_str or rgb_str == '00000000' or rgb_str == 'FFFFFFFF':
         return None
     try:
-        # Remove alpha channel if present and convert to RGB
-        if len(rgb_str) == 8:
-            rgb_str = rgb_str[2:]  # Skip alpha channel
+        # Handle different input formats
+        if isinstance(rgb_str, str):
+            # Remove alpha channel if present
+            if len(rgb_str) == 8:
+                rgb_str = rgb_str[2:]  # Skip alpha channel (ARGB -> RGB)
+            elif len(rgb_str) == 6:
+                pass  # Already RGB
+            else:
+                return None
+        else:
+            # Convert other types to string
+            rgb_str = str(rgb_str)
+            if len(rgb_str) == 8:
+                rgb_str = rgb_str[2:]
+        
+        # Convert to RGB tuple
         return tuple(int(rgb_str[i:i+2], 16) for i in (0, 2, 4))
     except:
         return None
+
+def get_cell_display_value(cell):
+    """Get the display value of a cell as it appears in Excel, preserving formatting"""
+    if cell.value is None:
+        return ""
+    
+    # Check if cell has number formatting
+    if hasattr(cell, 'number_format') and cell.number_format:
+        try:
+            # Import required modules for number formatting
+            from openpyxl.styles.numbers import BUILTIN_FORMATS
+            import datetime
+            
+            number_format = cell.number_format
+            cell_value = cell.value
+            
+            # Handle dates
+            if isinstance(cell_value, datetime.datetime):
+                if 'h' in number_format.lower() or 'mm' in number_format.lower():
+                    # Date with time
+                    if 'yyyy' in number_format or 'yy' in number_format:
+                        return cell_value.strftime('%m/%d/%Y %H:%M:%S')
+                    else:
+                        return cell_value.strftime('%H:%M:%S')
+                else:
+                    # Date only
+                    if 'yyyy' in number_format:
+                        return cell_value.strftime('%m/%d/%Y')
+                    elif 'yy' in number_format:
+                        return cell_value.strftime('%m/%d/%y')
+                    else:
+                        return cell_value.strftime('%m/%d')
+            
+            elif isinstance(cell_value, datetime.date):
+                if 'yyyy' in number_format:
+                    return cell_value.strftime('%m/%d/%Y')
+                elif 'yy' in number_format:
+                    return cell_value.strftime('%m/%d/%y')
+                else:
+                    return cell_value.strftime('%m/%d')
+            
+            # Handle numbers with specific formatting
+            elif isinstance(cell_value, (int, float)):
+                # Check for percentage
+                if '%' in number_format:
+                    if isinstance(cell_value, float):
+                        return f"{cell_value * 100:.1f}%" if cell_value != int(cell_value * 100) else f"{int(cell_value * 100)}%"
+                    else:
+                        return f"{cell_value * 100}%"
+                
+                # Check for currency
+                elif '$' in number_format or '€' in number_format or '£' in number_format:
+                    currency_symbol = '$' if '$' in number_format else ('€' if '€' in number_format else '£')
+                    if '0.00' in number_format or '.00' in number_format:
+                        return f"{currency_symbol}{cell_value:.2f}"
+                    else:
+                        return f"{currency_symbol}{cell_value:.0f}" if cell_value == int(cell_value) else f"{currency_symbol}{cell_value}"
+                
+                # Check for decimal places
+                elif '0.00' in number_format:
+                    return f"{cell_value:.2f}"
+                elif '0.0' in number_format:
+                    return f"{cell_value:.1f}"
+                elif '0.000' in number_format:
+                    return f"{cell_value:.3f}"
+                elif '0.0000' in number_format:
+                    return f"{cell_value:.4f}"
+                
+                # Check if should display as integer
+                elif isinstance(cell_value, float) and cell_value.is_integer():
+                    return str(int(cell_value))
+                else:
+                    return str(cell_value)
+            
+            # For other types, convert to string
+            else:
+                return str(cell_value)
+                
+        except Exception as e:
+            print(f"Warning: Could not apply number format '{cell.number_format}' to value '{cell.value}': {e}")
+            # Fallback to basic formatting
+            pass
+    
+    # Fallback to basic formatting if no number format or formatting failed
+    cell_value = cell.value
+    if isinstance(cell_value, (int, float)):
+        if isinstance(cell_value, float) and cell_value.is_integer():
+            return str(int(cell_value))
+        else:
+            return str(cell_value)
+    else:
+        return str(cell_value)
 
 def get_cell_style(cell):
     """Extract styling information from an Excel cell"""
@@ -44,16 +156,41 @@ def get_cell_style(cell):
             style['bold'] = True
         if cell.font.italic:
             style['italic'] = True
-        if cell.font.color and cell.font.color.rgb:
-            color = rgb_to_hex(str(cell.font.color.rgb))
-            if color:
-                style['font_color'] = color
+        if cell.font.color:
+            font_color = None
+            if hasattr(cell.font.color, 'rgb') and cell.font.color.rgb:
+                font_color = rgb_to_hex(str(cell.font.color.rgb))
+            elif hasattr(cell.font.color, 'indexed') and cell.font.color.indexed is not None:
+                # Handle indexed colors
+                try:
+                    from openpyxl.styles.colors import COLOR_INDEX
+                    if cell.font.color.indexed < len(COLOR_INDEX):
+                        indexed_color = COLOR_INDEX[cell.font.color.indexed]
+                        if indexed_color != 'FF000000':  # Not default black
+                            font_color = rgb_to_hex(indexed_color[2:])  # Remove FF prefix
+                except:
+                    pass
+            if font_color:
+                style['font_color'] = font_color
         if cell.font.size:
             style['font_size'] = cell.font.size
     
-    # Background color
-    if cell.fill and cell.fill.patternType and cell.fill.fgColor and cell.fill.fgColor.rgb:
-        bg_color = rgb_to_hex(str(cell.fill.fgColor.rgb))
+    # Background color - handle different fill types
+    if cell.fill:
+        bg_color = None
+        if hasattr(cell.fill, 'fgColor') and cell.fill.fgColor:
+            if hasattr(cell.fill.fgColor, 'rgb') and cell.fill.fgColor.rgb:
+                bg_color = rgb_to_hex(str(cell.fill.fgColor.rgb))
+            elif hasattr(cell.fill.fgColor, 'indexed') and cell.fill.fgColor.indexed is not None:
+                # Handle indexed colors (Excel's built-in color palette)
+                try:
+                    from openpyxl.styles.colors import COLOR_INDEX
+                    if cell.fill.fgColor.indexed < len(COLOR_INDEX):
+                        indexed_color = COLOR_INDEX[cell.fill.fgColor.indexed]
+                        if indexed_color != 'FF000000':  # Not black
+                            bg_color = rgb_to_hex(indexed_color[2:])  # Remove FF prefix
+                except:
+                    pass
         if bg_color:
             style['bg_color'] = bg_color
     
@@ -76,79 +213,66 @@ def get_cell_style(cell):
     return style
 
 def find_actual_data_range(worksheet):
-    """Find the actual data range, excluding empty rows/columns at the start and hidden rows/columns"""
-    # Find first row with data (excluding hidden rows)
-    start_row = 1
-    for row in range(1, worksheet.max_row + 1):
-        # Skip hidden rows
-        if worksheet.row_dimensions[row].hidden:
-            continue
-        has_data = False
-        for col in range(1, worksheet.max_column + 1):
-            # Skip hidden columns
-            if worksheet.column_dimensions[get_column_letter(col)].hidden:
-                continue
-            if worksheet.cell(row=row, column=col).value is not None:
-                has_data = True
-                break
-        if has_data:
-            start_row = row
-            break
+    """Find the actual data range efficiently, including ALL visible data"""
+    print(f"Analyzing worksheet with max_row: {worksheet.max_row}, max_col: {worksheet.max_column}")
     
-    # Find first column with data (excluding hidden columns)
-    start_col = 1
-    for col in range(1, worksheet.max_column + 1):
-        # Skip hidden columns
-        if worksheet.column_dimensions[get_column_letter(col)].hidden:
-            continue
-        has_data = False
-        for row in range(start_row, worksheet.max_row + 1):
-            # Skip hidden rows
-            if worksheet.row_dimensions[row].hidden:
-                continue
-            if worksheet.cell(row=row, column=col).value is not None:
-                has_data = True
-                break
-        if has_data:
-            start_col = col
-            break
+    # Get all cells with data, formatting, or merged cells
+    data_cells = []
+    formatted_cells = []
     
-    # Find last row with data (excluding hidden rows)
-    end_row = start_row
-    for row in range(worksheet.max_row, start_row - 1, -1):
-        # Skip hidden rows
-        if worksheet.row_dimensions[row].hidden:
-            continue
-        has_data = False
-        for col in range(start_col, worksheet.max_column + 1):
-            # Skip hidden columns
-            if worksheet.column_dimensions[get_column_letter(col)].hidden:
+    # Check all used range more efficiently
+    for row in worksheet.iter_rows(min_row=1, max_row=worksheet.max_row, 
+                                   min_col=1, max_col=worksheet.max_column):
+        for cell in row:
+            # Skip hidden rows/columns
+            if (worksheet.row_dimensions[cell.row].hidden or 
+                worksheet.column_dimensions[get_column_letter(cell.column)].hidden):
                 continue
-            if worksheet.cell(row=row, column=col).value is not None:
-                has_data = True
-                break
-        if has_data:
-            end_row = row
-            break
+                
+            # Check for data using formatted value
+            formatted_value = get_cell_display_value(cell)
+            if formatted_value.strip():
+                data_cells.append((cell.row, cell.column))
+            
+            # Check for formatting (background color, border, etc.) even if no data
+            elif (cell.fill and hasattr(cell.fill, 'fgColor') and cell.fill.fgColor and
+                  ((hasattr(cell.fill.fgColor, 'rgb') and cell.fill.fgColor.rgb and cell.fill.fgColor.rgb != 'FFFFFFFF') or
+                   (hasattr(cell.fill.fgColor, 'indexed') and cell.fill.fgColor.indexed is not None and cell.fill.fgColor.indexed != 64))):
+                formatted_cells.append((cell.row, cell.column))
+            
+            # Check for borders
+            elif (cell.border and any([
+                cell.border.top and cell.border.top.style,
+                cell.border.bottom and cell.border.bottom.style,
+                cell.border.left and cell.border.left.style,
+                cell.border.right and cell.border.right.style
+            ])):
+                formatted_cells.append((cell.row, cell.column))
     
-    # Find last column with data (excluding hidden columns)
-    end_col = start_col
-    for col in range(worksheet.max_column, start_col - 1, -1):
-        # Skip hidden columns
-        if worksheet.column_dimensions[get_column_letter(col)].hidden:
-            continue
-        has_data = False
-        for row in range(start_row, end_row + 1):
-            # Skip hidden rows
-            if worksheet.row_dimensions[row].hidden:
-                continue
-            if worksheet.cell(row=row, column=col).value is not None:
-                has_data = True
-                break
-        if has_data:
-            end_col = col
-            break
+    # Include merged cells
+    for merged_range in worksheet.merged_cells.ranges:
+        for row in range(merged_range.min_row, merged_range.max_row + 1):
+            for col in range(merged_range.min_col, merged_range.max_col + 1):
+                if (not worksheet.row_dimensions[row].hidden and 
+                    not worksheet.column_dimensions[get_column_letter(col)].hidden):
+                    formatted_cells.append((row, col))
     
+    # Combine all cells that should be included
+    all_cells = list(set(data_cells + formatted_cells))
+    
+    if not all_cells:
+        return 1, 1, 1, 1
+    
+    # Find the bounds including all relevant cells
+    rows = [cell[0] for cell in all_cells]
+    cols = [cell[1] for cell in all_cells]
+    
+    start_row = min(rows)
+    end_row = max(rows)
+    start_col = min(cols)
+    end_col = max(cols)
+    
+    print(f"Found data range: rows {start_row}-{end_row}, cols {start_col}-{end_col} ({len(data_cells)} data cells, {len(formatted_cells)} formatted cells)")
     return start_row, start_col, end_row, end_col
 
 def get_visible_row_col_mapping(worksheet, start_row, start_col, end_row, end_col):
@@ -276,15 +400,8 @@ def calculate_optimal_column_widths(worksheet, start_row, start_col, data_rows, 
             actual_col = col_mapping[col_idx] if col_mapping else start_col + col_idx
             cell = worksheet.cell(row=actual_row, column=actual_col)
             if cell.value is not None:
-                # Convert value to string and get length
-                if isinstance(cell.value, (int, float)):
-                    if isinstance(cell.value, float) and cell.value.is_integer():
-                        text_value = str(int(cell.value))
-                    else:
-                        text_value = str(cell.value)
-                else:
-                    text_value = str(cell.value)
-                
+                # Use formatted text value for accurate length calculation
+                text_value = get_cell_display_value(cell)
                 content_length = len(text_value)
                 max_content_length = max(max_content_length, content_length)
                 
@@ -393,9 +510,10 @@ def calculate_table_dimensions(worksheet, start_row, start_col, max_rows, max_co
             font_size = max(6, int(font_size * scale_factor))
     
     print(f"ADAPTIVE TABLE: {max_rows}x{max_cols} grid")
-    print(f"Variable column widths: {[f'{w:.2f}\"' for w in col_widths]}")
-    print(f"Row height: {row_height:.3f}\", Font size: {font_size}pt")
-    print(f"Total size: {total_width:.1f}\" x {row_height * max_rows:.1f}\"")
+    width_strs = [f'{w:.2f}\"' for w in col_widths]
+    print(f"Variable column widths: {width_strs}")
+    print(f'Row height: {row_height:.3f}\", Font size: {font_size}pt')
+    print(f'Total size: {total_width:.1f}\" x {row_height * max_rows:.1f}\"')
     
     return total_width, available_height, font_size, col_widths, row_height
 
@@ -488,19 +606,9 @@ def create_grouped_shape_table(slide, worksheet, start_row, start_col, data_rows
                 text_box.shadow.inherit = False  # Remove drop shadow
                 all_shapes.append(text_box)
                 
-                # Set cell text
-                if excel_cell.value is not None:
-                    cell_value = excel_cell.value
-                    if isinstance(cell_value, (int, float)):
-                        if isinstance(cell_value, float) and cell_value.is_integer():
-                            text_value = str(int(cell_value))
-                        else:
-                            text_value = str(cell_value)
-                    else:
-                        text_value = str(cell_value)
-                    text_box.text = text_value
-                else:
-                    text_box.text = ""
+                # Set cell text with preserved formatting
+                text_value = get_cell_display_value(excel_cell)
+                text_box.text = text_value
                 
                 # Format text (remove all drop shadows)
                 if text_box.text_frame and text_box.text_frame.paragraphs:
@@ -573,7 +681,8 @@ def create_grouped_shape_table(slide, worksheet, start_row, start_col, data_rows
             style = get_cell_style(excel_cell)
             
             # Cell should have borders if it has data or background color
-            has_data = excel_cell.value is not None and str(excel_cell.value).strip()
+            formatted_value = get_cell_display_value(excel_cell)
+            has_data = formatted_value.strip()
             has_background = 'bg_color' in style
             
             if has_data or has_background:
@@ -704,16 +813,37 @@ def create_grouped_shape_table(slide, worksheet, start_row, start_col, data_rows
     else:
         return all_shapes[0] if all_shapes else None
 
-def convert_excel_to_ppt(excel_file_path):
+def update_progress(session_id, percent, status):
+    """Update progress for a session"""
+    with progress_lock:
+        progress_data[session_id] = {
+            'percent': percent,
+            'status': status,
+            'timestamp': time.time()
+        }
+
+def convert_excel_to_ppt(excel_file_path, session_id=None):
     """Convert Excel workbook to PowerPoint presentation using shape-based tables"""
     try:
-        # Load Excel workbook
-        workbook = load_workbook(excel_file_path, data_only=True)
+        # Load Excel workbook with optimizations
+        if session_id:
+            update_progress(session_id, 5, "Loading Excel workbook...")
+        print("Loading Excel workbook...")
+        # Suppress warnings about unsupported features like sparklines
+        import warnings
+        warnings.filterwarnings('ignore', category=UserWarning, message='.*sparkline.*')
+        workbook = load_workbook(excel_file_path, data_only=True, read_only=False)
+        print(f"Loaded workbook with {len(workbook.sheetnames)} sheets")
+        if session_id:
+            update_progress(session_id, 10, f"Loaded {len(workbook.sheetnames)} sheets")
         
         # Create PowerPoint presentation
         prs = Presentation()
         
         # Process each worksheet
+        total_sheets = len([name for name in workbook.sheetnames if workbook[name].sheet_state != 'hidden'])
+        processed_sheets = 0
+        
         for sheet_name in workbook.sheetnames:
             worksheet = workbook[sheet_name]
             
@@ -793,10 +923,18 @@ def convert_excel_to_ppt(excel_file_path):
             )
             
             print(f"Completed sheet '{sheet_name}' with grouped resizable table")
+            processed_sheets += 1
+            if session_id:
+                progress_percent = 10 + (processed_sheets / total_sheets) * 80
+                update_progress(session_id, progress_percent, f"Completed sheet {processed_sheets}/{total_sheets}: {sheet_name}")
         
         # Save PowerPoint file
+        if session_id:
+            update_progress(session_id, 95, "Saving PowerPoint file...")
         output_path = os.path.join(app.config['UPLOAD_FOLDER'], 'converted_presentation.pptx')
         prs.save(output_path)
+        if session_id:
+            update_progress(session_id, 100, "Conversion complete!")
         
         return output_path
         
@@ -829,8 +967,11 @@ def upload_file():
             input_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(input_path)
             
+            # Get session ID for progress tracking
+            session_id = request.form.get('session_id', str(int(time.time() * 1000)))
+            
             # Convert to PowerPoint
-            output_path = convert_excel_to_ppt(input_path)
+            output_path = convert_excel_to_ppt(input_path, session_id)
             
             # Clean up input file
             if os.path.exists(input_path):
@@ -849,6 +990,15 @@ def upload_file():
             return redirect(request.url)
     
     return render_template('index.html')
+
+@app.route('/progress/<session_id>')
+def get_progress(session_id):
+    """Get progress for a session"""
+    with progress_lock:
+        if session_id in progress_data:
+            return jsonify(progress_data[session_id])
+        else:
+            return jsonify({'percent': 0, 'status': 'Not found', 'timestamp': time.time()})
 
 @app.errorhandler(413)
 def too_large(e):
