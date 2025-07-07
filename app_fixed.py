@@ -303,29 +303,83 @@ def find_actual_data_range(worksheet):
     print(f"Found data range: rows {start_row}-{end_row}, cols {start_col}-{end_col} ({len(data_cells)} data cells, {len(formatted_cells)} formatted cells)")
     return start_row, start_col, end_row, end_col
 
-def get_visible_row_col_mapping(worksheet, start_row, start_col, end_row, end_col):
-    """Create mappings between visible and actual row/column indices"""
-    visible_rows = []
-    visible_cols = []
-    row_mapping = {}  # visible index -> actual row
-    col_mapping = {}  # visible index -> actual col
+def get_all_visible_data_cells(worksheet):
+    """Get all visible cells with data, completely ignoring hidden rows/columns"""
+    print("Finding all visible cells with data...")
     
-    # Map visible rows
-    visible_idx = 0
-    for row in range(start_row, end_row + 1):
-        if not worksheet.row_dimensions[row].hidden:
-            visible_rows.append(row)
-            row_mapping[visible_idx] = row
-            visible_idx += 1
+    # Get bounds of worksheet but limit for performance
+    max_search_row = min(worksheet.max_row, 1000)
+    max_search_col = min(worksheet.max_column, 100)
     
-    # Map visible columns
-    visible_idx = 0
-    for col in range(start_col, end_col + 1):
-        if not worksheet.column_dimensions[get_column_letter(col)].hidden:
-            visible_cols.append(col)
-            col_mapping[visible_idx] = col
-            visible_idx += 1
+    visible_data_cells = []
     
+    for row_num in range(1, max_search_row + 1):
+        # Skip hidden rows entirely
+        if worksheet.row_dimensions[row_num].hidden:
+            continue
+            
+        for col_num in range(1, max_search_col + 1):
+            # Skip hidden columns entirely
+            if worksheet.column_dimensions[get_column_letter(col_num)].hidden:
+                continue
+                
+            cell = worksheet.cell(row=row_num, column=col_num)
+            
+            # Check if cell has data or formatting
+            has_data = cell.value is not None
+            has_formatting = False
+            
+            if not has_data:
+                # Quick formatting check
+                if (cell.fill and hasattr(cell.fill, 'fgColor') and cell.fill.fgColor):
+                    if ((hasattr(cell.fill.fgColor, 'rgb') and cell.fill.fgColor.rgb and 
+                         cell.fill.fgColor.rgb not in ['FFFFFFFF', '00000000']) or
+                        (hasattr(cell.fill.fgColor, 'indexed') and cell.fill.fgColor.indexed is not None and 
+                         cell.fill.fgColor.indexed not in [64, 0])):
+                        has_formatting = True
+                
+                if not has_formatting and cell.border:
+                    has_formatting = any([
+                        cell.border.top and cell.border.top.style,
+                        cell.border.bottom and cell.border.bottom.style,
+                        cell.border.left and cell.border.left.style,
+                        cell.border.right and cell.border.right.style
+                    ])
+            
+            if has_data or has_formatting:
+                visible_data_cells.append((row_num, col_num))
+    
+    print(f"Found {len(visible_data_cells)} visible cells with data/formatting")
+    return visible_data_cells
+
+def get_visible_data_bounds(visible_data_cells):
+    """Get the bounds of visible data cells"""
+    if not visible_data_cells:
+        return 1, 1, 1, 1
+    
+    rows = [cell[0] for cell in visible_data_cells]
+    cols = [cell[1] for cell in visible_data_cells]
+    
+    return min(rows), min(cols), max(rows), max(cols)
+
+def create_visible_mapping(worksheet, visible_data_cells):
+    """Create mapping for only the visible rows/columns that contain data"""
+    if not visible_data_cells:
+        return [], [], {}, {}
+    
+    # Get unique visible rows and columns that have data
+    visible_rows_set = set(cell[0] for cell in visible_data_cells)
+    visible_cols_set = set(cell[1] for cell in visible_data_cells)
+    
+    # Sort them
+    visible_rows = sorted(visible_rows_set)
+    visible_cols = sorted(visible_cols_set)
+    
+    # Create mappings from PowerPoint index to Excel row/col
+    row_mapping = {i: row for i, row in enumerate(visible_rows)}
+    col_mapping = {i: col for i, col in enumerate(visible_cols)}
+    
+    print(f"Visible data spans: {len(visible_rows)} rows, {len(visible_cols)} columns")
     return visible_rows, visible_cols, row_mapping, col_mapping
 
 def get_merged_cells_info_visible(worksheet, visible_rows, visible_cols, row_mapping, col_mapping):
@@ -409,7 +463,7 @@ def get_merged_cells_info(worksheet, start_row, start_col, end_row, end_col):
     
     return merged_info
 
-def calculate_optimal_column_widths(worksheet, start_row, start_col, data_rows, data_cols, available_width, row_mapping=None, col_mapping=None):
+def calculate_optimal_column_widths_visible(worksheet, data_rows, data_cols, available_width, row_mapping, col_mapping):
     """Calculate optimal column widths based on text content, ensuring no text wrapping"""
     # Extremely generous character width estimation to prevent any wrapping
     base_char_width = 0.25  # Massively increased to ensure absolutely no text wrapping
@@ -423,9 +477,9 @@ def calculate_optimal_column_widths(worksheet, start_row, start_col, data_rows, 
         
         # Check all cells in this column, with special attention to headers
         for row_idx in range(data_rows):
-            # Use mapping if provided, otherwise use direct indexing
-            actual_row = row_mapping[row_idx] if row_mapping else start_row + row_idx
-            actual_col = col_mapping[col_idx] if col_mapping else start_col + col_idx
+            # Use mapping to get actual Excel row/column
+            actual_row = row_mapping[row_idx]
+            actual_col = col_mapping[col_idx]
             cell = worksheet.cell(row=actual_row, column=actual_col)
             if cell.value is not None:
                 # Use formatted text value for accurate length calculation
@@ -485,7 +539,7 @@ def calculate_optimal_column_widths(worksheet, start_row, start_col, data_rows, 
     
     return col_widths
 
-def calculate_table_dimensions(worksheet, start_row, start_col, max_rows, max_cols, row_mapping=None, col_mapping=None):
+def calculate_table_dimensions_visible(worksheet, max_rows, max_cols, row_mapping, col_mapping):
     """Calculate table dimensions for shape-based table with optimal column sizing"""
     # Standard PowerPoint slide dimensions (16:9)
     slide_width = 10.0  # inches
@@ -500,7 +554,7 @@ def calculate_table_dimensions(worksheet, start_row, start_col, max_rows, max_co
     available_height = slide_height - (2 * margin) - title_space  # 6.6 inches
     
     # Calculate optimal column widths based on content
-    col_widths = calculate_optimal_column_widths(worksheet, start_row, start_col, max_rows, max_cols, available_width, row_mapping, col_mapping)
+    col_widths = calculate_optimal_column_widths_visible(worksheet, max_rows, max_cols, available_width, row_mapping, col_mapping)
     total_width = sum(col_widths)
     
     # Calculate row height based on available height
@@ -545,7 +599,7 @@ def calculate_table_dimensions(worksheet, start_row, start_col, max_rows, max_co
     
     return total_width, available_height, font_size, col_widths, row_height
 
-def create_grouped_shape_table(slide, worksheet, start_row, start_col, data_rows, data_cols, left, top, table_width, font_size, col_widths, row_height, row_mapping=None, col_mapping=None):
+def create_grouped_shape_table_visible(slide, worksheet, data_rows, data_cols, left, top, table_width, font_size, col_widths, row_height, row_mapping, col_mapping):
     """Create a resizable grouped shape table that mimics Excel layout exactly"""
     
     # Get merged cell information for visible cells
@@ -584,9 +638,9 @@ def create_grouped_shape_table(slide, worksheet, start_row, start_col, data_rows
                 if (row_idx, col_idx) in merged_info and merged_info[(row_idx, col_idx)] == 'skip':
                     continue
                 
-                # Use mapping if provided, otherwise use direct indexing
-                actual_row = row_mapping[row_idx] if row_mapping else start_row + row_idx
-                actual_col = col_mapping[col_idx] if col_mapping else start_col + col_idx
+                # Use mapping to get actual Excel row/column  
+                actual_row = row_mapping[row_idx]
+                actual_col = col_mapping[col_idx]
                 excel_cell = worksheet.cell(row=actual_row, column=actual_col)
                 style = get_cell_style(excel_cell)
                 
@@ -702,9 +756,9 @@ def create_grouped_shape_table(slide, worksheet, start_row, start_col, data_rows
     cells_with_borders = set()
     for row_idx in range(data_rows):
         for col_idx in range(data_cols):
-            # Use mapping if provided, otherwise use direct indexing
-            actual_row = row_mapping[row_idx] if row_mapping else start_row + row_idx
-            actual_col = col_mapping[col_idx] if col_mapping else start_col + col_idx
+            # Use mapping to get actual Excel row/column
+            actual_row = row_mapping[row_idx]
+            actual_col = col_mapping[col_idx]
             excel_cell = worksheet.cell(row=actual_row, column=actual_col)
             style = get_cell_style(excel_cell)
             
@@ -886,34 +940,34 @@ def convert_excel_to_ppt(excel_file_path, session_id=None):
             if session_id:
                 update_progress(session_id, 15 + (processed_sheets / total_sheets) * 10, f"Analyzing sheet: {sheet_name}")
             
-            # Find actual data range (trim whitespace and hidden rows/columns)
-            print(f"Finding data range for sheet '{sheet_name}'...")
-            start_row, start_col, end_row, end_col = find_actual_data_range(worksheet)
+            # Get ONLY visible cells with data (completely ignoring hidden rows/columns)
+            print(f"Finding visible data cells for sheet '{sheet_name}'...")
+            visible_data_cells = get_all_visible_data_cells(worksheet)
             
-            # Skip empty worksheets
-            if start_row > end_row or start_col > end_col:
-                print(f"Skipping empty sheet '{sheet_name}'")
+            if not visible_data_cells:
+                print(f"Skipping sheet '{sheet_name}' - no visible data")
                 continue
             
             # Update progress
             if session_id:
                 update_progress(session_id, 20 + (processed_sheets / total_sheets) * 15, f"Processing data for sheet: {sheet_name}")
             
-            # Get visible row/column mapping
-            print(f"Creating row/column mappings for sheet '{sheet_name}'...")
-            visible_rows, visible_cols, row_mapping, col_mapping = get_visible_row_col_mapping(
-                worksheet, start_row, start_col, end_row, end_col
-            )
+            # Create mapping for only visible data
+            print(f"Creating mappings for visible data in sheet '{sheet_name}'...")
+            visible_rows, visible_cols, row_mapping, col_mapping = create_visible_mapping(worksheet, visible_data_cells)
             
             # Use visible rows/cols for data dimensions
             data_rows = len(visible_rows)
             data_cols = len(visible_cols)
             
             if data_rows == 0 or data_cols == 0:
-                print(f"Skipping sheet '{sheet_name}' - no visible data")
+                print(f"Skipping sheet '{sheet_name}' - no visible data after mapping")
                 continue
             
             print(f"Sheet '{sheet_name}': {data_rows} visible rows, {data_cols} visible columns")
+            
+            # Get data bounds for the sheet processing
+            start_row, start_col, end_row, end_col = get_visible_data_bounds(visible_data_cells)
             
             # Add slide
             slide_layout = prs.slide_layouts[5]  # Blank layout
@@ -953,8 +1007,8 @@ def convert_excel_to_ppt(excel_file_path, session_id=None):
             
             # Calculate table dimensions with adaptive column widths
             print(f"Calculating table dimensions for sheet '{sheet_name}'...")
-            table_width, available_height, font_size, col_widths, row_height = calculate_table_dimensions(
-                worksheet, start_row, start_col, data_rows, data_cols, row_mapping, col_mapping
+            table_width, available_height, font_size, col_widths, row_height = calculate_table_dimensions_visible(
+                worksheet, data_rows, data_cols, row_mapping, col_mapping
             )
             
             # Position table
@@ -970,8 +1024,8 @@ def convert_excel_to_ppt(excel_file_path, session_id=None):
             
             # Create the grouped shape table with proper data range and variable column widths
             print(f"Building PowerPoint table for sheet '{sheet_name}' with {data_rows}x{data_cols} visible cells...")
-            table_shape = create_grouped_shape_table(
-                slide, worksheet, start_row, start_col, data_rows, data_cols, left, top, 
+            table_shape = create_grouped_shape_table_visible(
+                slide, worksheet, data_rows, data_cols, left, top, 
                 table_width, font_size, col_widths, row_height, row_mapping, col_mapping
             )
             
