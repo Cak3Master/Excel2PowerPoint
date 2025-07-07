@@ -212,96 +212,6 @@ def get_cell_style(cell):
     
     return style
 
-def find_actual_data_range(worksheet):
-    """Find the actual data range efficiently, including ALL visible data"""
-    print(f"Analyzing worksheet '{worksheet.title}' with max_row: {worksheet.max_row}, max_col: {worksheet.max_column}")
-    
-    # For very large sheets, limit the search to a reasonable area
-    max_search_row = min(worksheet.max_row, 1000)  # Limit to first 1000 rows
-    max_search_col = min(worksheet.max_column, 100)  # Limit to first 100 columns
-    
-    if worksheet.max_row > 1000 or worksheet.max_column > 100:
-        print(f"Large worksheet detected, limiting search to rows 1-{max_search_row}, cols 1-{max_search_col}")
-    
-    # Get all cells with data, formatting, or merged cells
-    data_cells = []
-    formatted_cells = []
-    
-    # More efficient approach: only check cells that actually have values first
-    print("Phase 1: Finding cells with data...")
-    cells_checked = 0
-    for row in worksheet.iter_rows(min_row=1, max_row=max_search_row, 
-                                   min_col=1, max_col=max_search_col, 
-                                   values_only=False):
-        for cell in row:
-            cells_checked += 1
-            if cells_checked % 10000 == 0:
-                print(f"Checked {cells_checked} cells...")
-                
-            # Skip hidden rows/columns
-            if (worksheet.row_dimensions[cell.row].hidden or 
-                worksheet.column_dimensions[get_column_letter(cell.column)].hidden):
-                continue
-                
-            # Quick check for data first
-            if cell.value is not None:
-                data_cells.append((cell.row, cell.column))
-                continue
-            
-            # Only check formatting for cells without data (much faster)
-            has_formatting = False
-            
-            # Quick background color check
-            if (cell.fill and hasattr(cell.fill, 'fgColor') and cell.fill.fgColor):
-                if ((hasattr(cell.fill.fgColor, 'rgb') and cell.fill.fgColor.rgb and 
-                     cell.fill.fgColor.rgb not in ['FFFFFFFF', '00000000']) or
-                    (hasattr(cell.fill.fgColor, 'indexed') and cell.fill.fgColor.indexed is not None and 
-                     cell.fill.fgColor.indexed not in [64, 0])):
-                    has_formatting = True
-            
-            # Quick border check
-            if not has_formatting and cell.border:
-                has_formatting = any([
-                    cell.border.top and cell.border.top.style,
-                    cell.border.bottom and cell.border.bottom.style,
-                    cell.border.left and cell.border.left.style,
-                    cell.border.right and cell.border.right.style
-                ])
-            
-            if has_formatting:
-                formatted_cells.append((cell.row, cell.column))
-    
-    print(f"Phase 1 complete: {len(data_cells)} data cells, {len(formatted_cells)} formatted cells")
-    
-    # Quick merged cells check
-    print("Phase 2: Processing merged cells...")
-    for merged_range in worksheet.merged_cells.ranges:
-        # Only process merged ranges within our search area
-        if (merged_range.min_row <= max_search_row and merged_range.min_col <= max_search_col):
-            for row in range(merged_range.min_row, min(merged_range.max_row + 1, max_search_row + 1)):
-                for col in range(merged_range.min_col, min(merged_range.max_col + 1, max_search_col + 1)):
-                    if (not worksheet.row_dimensions[row].hidden and 
-                        not worksheet.column_dimensions[get_column_letter(col)].hidden):
-                        formatted_cells.append((row, col))
-    
-    # Combine all cells that should be included
-    all_cells = list(set(data_cells + formatted_cells))
-    
-    if not all_cells:
-        print("No data found, returning minimal range")
-        return 1, 1, 1, 1
-    
-    # Find the bounds including all relevant cells
-    rows = [cell[0] for cell in all_cells]
-    cols = [cell[1] for cell in all_cells]
-    
-    start_row = min(rows)
-    end_row = max(rows)
-    start_col = min(cols)
-    end_col = max(cols)
-    
-    print(f"Found data range: rows {start_row}-{end_row}, cols {start_col}-{end_col} ({len(data_cells)} data cells, {len(formatted_cells)} formatted cells)")
-    return start_row, start_col, end_row, end_col
 
 def get_all_visible_data_cells(worksheet):
     """Get all visible cells with data, completely ignoring hidden rows/columns"""
@@ -608,7 +518,8 @@ def create_grouped_shape_table_visible(slide, worksheet, data_rows, data_cols, l
         visible_cols = [col_mapping[i] for i in range(data_cols)]
         merged_info = get_merged_cells_info_visible(worksheet, visible_rows, visible_cols, row_mapping, col_mapping)
     else:
-        merged_info = get_merged_cells_info(worksheet, start_row, start_col, start_row + data_rows - 1, start_col + data_cols - 1)
+        # Fallback: empty merged info if no mappings provided
+        merged_info = {}
     
     # Calculate table height
     table_height = row_height * data_rows
@@ -965,9 +876,8 @@ def convert_excel_to_ppt(excel_file_path, session_id=None):
                 continue
             
             print(f"Sheet '{sheet_name}': {data_rows} visible rows, {data_cols} visible columns")
-            
-            # Get data bounds for the sheet processing
-            start_row, start_col, end_row, end_col = get_visible_data_bounds(visible_data_cells)
+            print(f"Visible rows in Excel: {visible_rows}")
+            print(f"Visible columns in Excel: {visible_cols}")
             
             # Add slide
             slide_layout = prs.slide_layouts[5]  # Blank layout
@@ -995,11 +905,9 @@ def convert_excel_to_ppt(excel_file_path, session_id=None):
             
             print(f"\n{'='*60}")
             print(f"Processing sheet '{sheet_name}':")
-            print(f"  Data range: {start_row}-{end_row} rows, {start_col}-{end_col} columns")
-            print(f"  Actual data: {data_rows} rows x {data_cols} columns")
-            
-            if data_rows == 0 or data_cols == 0:
-                continue
+            print(f"  Visible data: {data_rows} rows x {data_cols} columns")
+            print(f"  Excel rows: {visible_rows}")
+            print(f"  Excel columns: {visible_cols}")
             
             # Update progress
             if session_id:
