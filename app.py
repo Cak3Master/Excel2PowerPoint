@@ -214,53 +214,81 @@ def get_cell_style(cell):
 
 def find_actual_data_range(worksheet):
     """Find the actual data range efficiently, including ALL visible data"""
-    print(f"Analyzing worksheet with max_row: {worksheet.max_row}, max_col: {worksheet.max_column}")
+    print(f"Analyzing worksheet '{worksheet.title}' with max_row: {worksheet.max_row}, max_col: {worksheet.max_column}")
+    
+    # For very large sheets, limit the search to a reasonable area
+    max_search_row = min(worksheet.max_row, 1000)  # Limit to first 1000 rows
+    max_search_col = min(worksheet.max_column, 100)  # Limit to first 100 columns
+    
+    if worksheet.max_row > 1000 or worksheet.max_column > 100:
+        print(f"Large worksheet detected, limiting search to rows 1-{max_search_row}, cols 1-{max_search_col}")
     
     # Get all cells with data, formatting, or merged cells
     data_cells = []
     formatted_cells = []
     
-    # Check all used range more efficiently
-    for row in worksheet.iter_rows(min_row=1, max_row=worksheet.max_row, 
-                                   min_col=1, max_col=worksheet.max_column):
+    # More efficient approach: only check cells that actually have values first
+    print("Phase 1: Finding cells with data...")
+    cells_checked = 0
+    for row in worksheet.iter_rows(min_row=1, max_row=max_search_row, 
+                                   min_col=1, max_col=max_search_col, 
+                                   values_only=False):
         for cell in row:
+            cells_checked += 1
+            if cells_checked % 10000 == 0:
+                print(f"Checked {cells_checked} cells...")
+                
             # Skip hidden rows/columns
             if (worksheet.row_dimensions[cell.row].hidden or 
                 worksheet.column_dimensions[get_column_letter(cell.column)].hidden):
                 continue
                 
-            # Check for data using formatted value
-            formatted_value = get_cell_display_value(cell)
-            if formatted_value.strip():
+            # Quick check for data first
+            if cell.value is not None:
                 data_cells.append((cell.row, cell.column))
+                continue
             
-            # Check for formatting (background color, border, etc.) even if no data
-            elif (cell.fill and hasattr(cell.fill, 'fgColor') and cell.fill.fgColor and
-                  ((hasattr(cell.fill.fgColor, 'rgb') and cell.fill.fgColor.rgb and cell.fill.fgColor.rgb != 'FFFFFFFF') or
-                   (hasattr(cell.fill.fgColor, 'indexed') and cell.fill.fgColor.indexed is not None and cell.fill.fgColor.indexed != 64))):
-                formatted_cells.append((cell.row, cell.column))
+            # Only check formatting for cells without data (much faster)
+            has_formatting = False
             
-            # Check for borders
-            elif (cell.border and any([
-                cell.border.top and cell.border.top.style,
-                cell.border.bottom and cell.border.bottom.style,
-                cell.border.left and cell.border.left.style,
-                cell.border.right and cell.border.right.style
-            ])):
+            # Quick background color check
+            if (cell.fill and hasattr(cell.fill, 'fgColor') and cell.fill.fgColor):
+                if ((hasattr(cell.fill.fgColor, 'rgb') and cell.fill.fgColor.rgb and 
+                     cell.fill.fgColor.rgb not in ['FFFFFFFF', '00000000']) or
+                    (hasattr(cell.fill.fgColor, 'indexed') and cell.fill.fgColor.indexed is not None and 
+                     cell.fill.fgColor.indexed not in [64, 0])):
+                    has_formatting = True
+            
+            # Quick border check
+            if not has_formatting and cell.border:
+                has_formatting = any([
+                    cell.border.top and cell.border.top.style,
+                    cell.border.bottom and cell.border.bottom.style,
+                    cell.border.left and cell.border.left.style,
+                    cell.border.right and cell.border.right.style
+                ])
+            
+            if has_formatting:
                 formatted_cells.append((cell.row, cell.column))
     
-    # Include merged cells
+    print(f"Phase 1 complete: {len(data_cells)} data cells, {len(formatted_cells)} formatted cells")
+    
+    # Quick merged cells check
+    print("Phase 2: Processing merged cells...")
     for merged_range in worksheet.merged_cells.ranges:
-        for row in range(merged_range.min_row, merged_range.max_row + 1):
-            for col in range(merged_range.min_col, merged_range.max_col + 1):
-                if (not worksheet.row_dimensions[row].hidden and 
-                    not worksheet.column_dimensions[get_column_letter(col)].hidden):
-                    formatted_cells.append((row, col))
+        # Only process merged ranges within our search area
+        if (merged_range.min_row <= max_search_row and merged_range.min_col <= max_search_col):
+            for row in range(merged_range.min_row, min(merged_range.max_row + 1, max_search_row + 1)):
+                for col in range(merged_range.min_col, min(merged_range.max_col + 1, max_search_col + 1)):
+                    if (not worksheet.row_dimensions[row].hidden and 
+                        not worksheet.column_dimensions[get_column_letter(col)].hidden):
+                        formatted_cells.append((row, col))
     
     # Combine all cells that should be included
     all_cells = list(set(data_cells + formatted_cells))
     
     if not all_cells:
+        print("No data found, returning minimal range")
         return 1, 1, 1, 1
     
     # Find the bounds including all relevant cells
@@ -824,6 +852,8 @@ def update_progress(session_id, percent, status):
 
 def convert_excel_to_ppt(excel_file_path, session_id=None):
     """Convert Excel workbook to PowerPoint presentation using shape-based tables"""
+    start_time = time.time()
+    
     try:
         # Load Excel workbook with optimizations
         if session_id:
@@ -852,14 +882,25 @@ def convert_excel_to_ppt(excel_file_path, session_id=None):
                 print(f"Skipping hidden sheet: '{sheet_name}'")
                 continue
             
+            # Update progress
+            if session_id:
+                update_progress(session_id, 15 + (processed_sheets / total_sheets) * 10, f"Analyzing sheet: {sheet_name}")
+            
             # Find actual data range (trim whitespace and hidden rows/columns)
+            print(f"Finding data range for sheet '{sheet_name}'...")
             start_row, start_col, end_row, end_col = find_actual_data_range(worksheet)
             
             # Skip empty worksheets
             if start_row > end_row or start_col > end_col:
+                print(f"Skipping empty sheet '{sheet_name}'")
                 continue
             
+            # Update progress
+            if session_id:
+                update_progress(session_id, 20 + (processed_sheets / total_sheets) * 15, f"Processing data for sheet: {sheet_name}")
+            
             # Get visible row/column mapping
+            print(f"Creating row/column mappings for sheet '{sheet_name}'...")
             visible_rows, visible_cols, row_mapping, col_mapping = get_visible_row_col_mapping(
                 worksheet, start_row, start_col, end_row, end_col
             )
@@ -871,6 +912,8 @@ def convert_excel_to_ppt(excel_file_path, session_id=None):
             if data_rows == 0 or data_cols == 0:
                 print(f"Skipping sheet '{sheet_name}' - no visible data")
                 continue
+            
+            print(f"Sheet '{sheet_name}': {data_rows} visible rows, {data_cols} visible columns")
             
             # Add slide
             slide_layout = prs.slide_layouts[5]  # Blank layout
@@ -904,7 +947,12 @@ def convert_excel_to_ppt(excel_file_path, session_id=None):
             if data_rows == 0 or data_cols == 0:
                 continue
             
+            # Update progress
+            if session_id:
+                update_progress(session_id, 35 + (processed_sheets / total_sheets) * 20, f"Calculating dimensions for sheet: {sheet_name}")
+            
             # Calculate table dimensions with adaptive column widths
+            print(f"Calculating table dimensions for sheet '{sheet_name}'...")
             table_width, available_height, font_size, col_widths, row_height = calculate_table_dimensions(
                 worksheet, start_row, start_col, data_rows, data_cols, row_mapping, col_mapping
             )
@@ -914,9 +962,14 @@ def convert_excel_to_ppt(excel_file_path, session_id=None):
             left = Inches(margin)
             top = Inches(margin + 0.4)
             
+            # Update progress
+            if session_id:
+                update_progress(session_id, 55 + (processed_sheets / total_sheets) * 30, f"Creating table for sheet: {sheet_name}")
+            
             print(f"Creating grouped shape table at ({margin:.1f}\", {margin+0.4:.1f}\")")
             
             # Create the grouped shape table with proper data range and variable column widths
+            print(f"Building PowerPoint table for sheet '{sheet_name}' with {data_rows}x{data_cols} visible cells...")
             table_shape = create_grouped_shape_table(
                 slide, worksheet, start_row, start_col, data_rows, data_cols, left, top, 
                 table_width, font_size, col_widths, row_height, row_mapping, col_mapping
@@ -936,9 +989,19 @@ def convert_excel_to_ppt(excel_file_path, session_id=None):
         if session_id:
             update_progress(session_id, 100, "Conversion complete!")
         
+        elapsed_time = time.time() - start_time
+        print(f"Conversion completed in {elapsed_time:.2f} seconds")
+        
         return output_path
         
+    except TimeoutError as e:
+        if session_id:
+            update_progress(session_id, 0, "Conversion timed out - file too large")
+        raise Exception("Conversion timed out. File may be too large or complex.")
+        
     except Exception as e:
+        if session_id:
+            update_progress(session_id, 0, f"Error: {str(e)}")
         raise Exception(f"Error converting Excel to PowerPoint: {str(e)}")
 
 @app.route('/', methods=['GET', 'POST'])
