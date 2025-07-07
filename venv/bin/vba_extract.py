@@ -1,4 +1,4 @@
-#!/home/steve/projects/Excel2PowerPoint/venv/bin/python3
+#!/root/excel2powerpoint/venv/bin/python3
 
 ##############################################################################
 #

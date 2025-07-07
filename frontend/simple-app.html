@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel to PowerPoint Converter</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .main-content {
+            padding: 30px;
+        }
+        
+        .upload-section {
+            border: 2px dashed #ddd;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 30px;
+            transition: all 0.3s ease;
+        }
+        
+        .upload-section:hover {
+            border-color: #667eea;
+            background-color: #f8f9ff;
+        }
+        
+        .upload-section.dragover {
+            border-color: #667eea;
+            background-color: #f0f4ff;
+        }
+        
+        .upload-icon {
+            font-size: 3em;
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+        
+        .file-input {
+            display: none;
+        }
+        
+        .upload-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .upload-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+        
+        .file-info {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        
+        .worksheets-section {
+            display: none;
+            margin-bottom: 30px;
+        }
+        
+        .worksheet-card {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .worksheet-card:hover {
+            border-color: #667eea;
+            background-color: #f0f4ff;
+        }
+        
+        .worksheet-card.selected {
+            border-color: #667eea;
+            background-color: #e7f3ff;
+        }
+        
+        .table-item {
+            background: white;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 10px 0;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .table-item:hover {
+            border-color: #667eea;
+        }
+        
+        .table-item.selected {
+            border-color: #667eea;
+            background-color: #f0f4ff;
+        }
+        
+        .formatting-section {
+            display: none;
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+        
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .form-row {
+            display: flex;
+            gap: 20px;
+        }
+        
+        .form-row .form-group {
+            flex: 1;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+        }
+        
+        .convert-btn {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: none;
+        }
+        
+        .convert-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(40, 167, 69, 0.3);
+        }
+        
+        .convert-btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        
+        .success {
+            background: #d1edff;
+            color: #0c5460;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Excel to PowerPoint Converter</h1>
+            <p>Transform your Excel data into beautiful PowerPoint presentations</p>
+        </div>
+        
+        <div class="main-content">
+            <div class="error" id="error-message"></div>
+            <div class="success" id="success-message"></div>
+            
+            <!-- File Upload Section -->
+            <div class="upload-section" id="upload-section">
+                <div class="upload-icon">📁</div>
+                <h3>Upload Excel File</h3>
+                <p>Drag and drop your .xlsx file here or click to select</p>
+                <input type="file" id="file-input" class="file-input" accept=".xlsx">
+                <button class="upload-btn" onclick="document.getElementById('file-input').click()">
+                    Choose File
+                </button>
+            </div>
+            
+            <!-- File Information -->
+            <div class="file-info" id="file-info">
+                <h4>File Information</h4>
+                <p id="file-details"></p>
+            </div>
+            
+            <!-- Worksheets Section -->
+            <div class="worksheets-section" id="worksheets-section">
+                <h3>Select Worksheets and Tables</h3>
+                <div id="worksheets-container"></div>
+            </div>
+            
+            <!-- Formatting Options -->
+            <div class="formatting-section" id="formatting-section">
+                <h3>Formatting Options</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="font-size">Font Size</label>
+                        <input type="number" id="font-size" min="8" max="72" value="10">
+                    </div>
+                    <div class="form-group">
+                        <label for="font-family">Font Family</label>
+                        <select id="font-family">
+                            <option value="Arial">Arial</option>
+                            <option value="Calibri">Calibri</option>
+                            <option value="Times New Roman">Times New Roman</option>
+                            <option value="Helvetica">Helvetica</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="table-alignment">Table Alignment</label>
+                        <select id="table-alignment">
+                            <option value="center">Center</option>
+                            <option value="left">Left</option>
+                            <option value="right">Right</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="slide-orientation">Slide Orientation</label>
+                        <select id="slide-orientation">
+                            <option value="horizontal">Horizontal</option>
+                            <option value="vertical">Vertical</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="row-spacing">Row Spacing</label>
+                        <input type="number" id="row-spacing" min="0.5" max="3" step="0.1" value="1.0">
+                    </div>
+                    <div class="form-group">
+                        <label for="column-spacing">Column Spacing</label>
+                        <input type="number" id="column-spacing" min="0.5" max="3" step="0.1" value="1.0">
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="repeat-headers" checked>
+                            <label for="repeat-headers">Repeat Headers</label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="auto-split" checked>
+                            <label for="auto-split">Auto-split Large Tables</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Convert Button -->
+            <button class="convert-btn" id="convert-btn" onclick="convertToPowerPoint()">
+                🔄 Convert to PowerPoint
+            </button>
+            
+            <!-- Loading -->
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Converting your Excel file to PowerPoint...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let fileId = null;
+        let selectedTables = [];
+        let worksheetData = [];
+
+        // File upload handling
+        const fileInput = document.getElementById('file-input');
+        const uploadSection = document.getElementById('upload-section');
+        
+        fileInput.addEventListener('change', handleFileSelect);
+        
+        // Drag and drop
+        uploadSection.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadSection.classList.add('dragover');
+        });
+        
+        uploadSection.addEventListener('dragleave', () => {
+            uploadSection.classList.remove('dragover');
+        });
+        
+        uploadSection.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadSection.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+        
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (file) {
+                handleFile(file);
+            }
+        }
+        
+        async function handleFile(file) {
+            if (!file.name.endsWith('.xlsx')) {
+                showError('Please select an Excel file (.xlsx)');
+                return;
+            }
+            
+            showLoading(true);
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+                const response = await fetch('http://localhost:5000/api/analyze-excel', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                fileId = data.file_id;
+                worksheetData = data.sheets;
+                
+                displayFileInfo(file, data);
+                displayWorksheets(data.sheets);
+                
+            } catch (error) {
+                showError('Error analyzing Excel file: ' + error.message);
+            } finally {
+                showLoading(false);
+            }
+        }
+        
+        function displayFileInfo(file, data) {
+            const fileInfo = document.getElementById('file-info');
+            const fileDetails = document.getElementById('file-details');
+            
+            fileDetails.innerHTML = `
+                <strong>File:</strong> ${file.name}<br>
+                <strong>Size:</strong> ${(file.size / 1024).toFixed(2)} KB<br>
+                <strong>Worksheets:</strong> ${data.sheets.length}
+            `;
+            
+            fileInfo.style.display = 'block';
+        }
+        
+        function displayWorksheets(sheets) {
+            const container = document.getElementById('worksheets-container');
+            container.innerHTML = '';
+            
+            sheets.forEach((sheet, sheetIndex) => {
+                const worksheetCard = document.createElement('div');
+                worksheetCard.className = 'worksheet-card';
+                worksheetCard.innerHTML = `
+                    <h4>${sheet.name}</h4>
+                    <p>Rows: ${sheet.rows}, Columns: ${sheet.columns}</p>
+                    <p>Tables found: ${sheet.tables.length}</p>
+                    <div class="tables-container" id="tables-${sheetIndex}"></div>
+                `;
+                
+                container.appendChild(worksheetCard);
+                
+                // Display tables
+                const tablesContainer = document.getElementById(`tables-${sheetIndex}`);
+                sheet.tables.forEach((table, tableIndex) => {
+                    const tableItem = document.createElement('div');
+                    tableItem.className = 'table-item';
+                    tableItem.innerHTML = `
+                        <strong>Table ${tableIndex + 1}:</strong> ${table.start_cell} to ${table.end_cell}<br>
+                        <small>Size: ${table.rows} rows × ${table.columns} columns</small>
+                    `;
+                    
+                    tableItem.addEventListener('click', () => {
+                        const tableId = `${sheetIndex}-${tableIndex}`;
+                        toggleTableSelection(tableItem, tableId, sheet.name, table);
+                    });
+                    
+                    tablesContainer.appendChild(tableItem);
+                });
+            });
+            
+            document.getElementById('worksheets-section').style.display = 'block';
+            document.getElementById('formatting-section').style.display = 'block';
+        }
+        
+        function toggleTableSelection(element, tableId, sheetName, table) {
+            const isSelected = element.classList.contains('selected');
+            
+            if (isSelected) {
+                element.classList.remove('selected');
+                selectedTables = selectedTables.filter(t => t.id !== tableId);
+            } else {
+                element.classList.add('selected');
+                selectedTables.push({
+                    id: tableId,
+                    sheet_name: sheetName,
+                    start_cell: table.start_cell,
+                    end_cell: table.end_cell,
+                    has_headers: table.has_headers
+                });
+            }
+            
+            // Show/hide convert button
+            const convertBtn = document.getElementById('convert-btn');
+            convertBtn.style.display = selectedTables.length > 0 ? 'block' : 'none';
+        }
+        
+        async function convertToPowerPoint() {
+            if (selectedTables.length === 0) {
+                showError('Please select at least one table');
+                return;
+            }
+            
+            showLoading(true);
+            
+            const formattingOptions = {
+                font_size: parseInt(document.getElementById('font-size').value),
+                font_family: document.getElementById('font-family').value,
+                table_alignment: document.getElementById('table-alignment').value,
+                slide_orientation: document.getElementById('slide-orientation').value,
+                row_spacing: parseFloat(document.getElementById('row-spacing').value),
+                column_spacing: parseFloat(document.getElementById('column-spacing').value),
+                repeat_headers: document.getElementById('repeat-headers').checked,
+                auto_split_large_tables: document.getElementById('auto-split').checked
+            };
+            
+            try {
+                const response = await fetch('http://localhost:5000/api/convert-to-pptx', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        file_id: fileId,
+                        selected_ranges: selectedTables,
+                        formatting_options: formattingOptions
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'converted_presentation.pptx';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                
+                showSuccess('PowerPoint file has been generated and downloaded!');
+                
+            } catch (error) {
+                showError('Error converting to PowerPoint: ' + error.message);
+            } finally {
+                showLoading(false);
+            }
+        }
+        
+        function showError(message) {
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+        
+        function showSuccess(message) {
+            const successDiv = document.getElementById('success-message');
+            successDiv.textContent = message;
+            successDiv.style.display = 'block';
+            setTimeout(() => {
+                successDiv.style.display = 'none';
+            }, 5000);
+        }
+        
+        function showLoading(show) {
+            const loading = document.getElementById('loading');
+            loading.style.display = show ? 'block' : 'none';
+        }
+    </script>
+</body>
+</html>

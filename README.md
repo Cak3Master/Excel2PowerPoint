@@ -1,153 +1,455 @@
-# Excel-to-PPT Slide Converter
+# Excel to PowerPoint Converter
 
-This professional web application converts complex Excel workbooks into perfectly formatted PowerPoint presentations. Each worksheet becomes a separate slide with corporate-quality table formatting that fits precisely within slide boundaries.
+A professional web application that converts Excel workbooks into perfectly formatted PowerPoint presentations. The application features a modern React frontend with a powerful FastAPI backend, providing an intuitive interface for uploading Excel files and converting them to high-quality PowerPoint slides.
 
-## ✨ Key Features
+## 🚀 Features
 
-### 🎯 **Advanced Table Processing**
-- **Shape-based tables**: Custom implementation bypassing PowerPoint's limitations
-- **Adaptive column sizing**: Intelligent width calculation based on content and headers  
-- **Perfect merged cell support**: Preserves Excel merged cell layouts exactly
-- **Auto data trimming**: Removes empty rows/columns automatically
-- **Header optimization**: Prevents text wrapping in header rows
+### Advanced Excel Processing
+- **Multi-sheet support** - Convert multiple worksheets into separate slides
+- **Intelligent table detection** - Automatically identifies data regions and tables
+- **Data range selection** - Choose specific ranges from each worksheet
+- **Format preservation** - Maintains fonts, colors, alignment, and styling
+- **Merged cell support** - Handles complex merged cell layouts
+- **Smart data trimming** - Removes empty rows and columns automatically
 
-### 🎨 **Professional Formatting**
-- **Complete style preservation**: Fonts, colors, bold, italic, alignment
-- **Cell background colors**: Exact color matching from Excel
-- **No drop shadows**: Clean, corporate appearance
-- **Subtle gridlines**: Excel-like appearance with smart header handling
-- **Variable column widths**: Each column sized optimally for its content
+### Professional PowerPoint Output
+- **Shape-based tables** - Custom implementation for precise control over table formatting
+- **Adaptive column sizing** - Intelligent width calculation based on content
+- **Perfect slide fit** - Always scales to fit within slide boundaries
+- **Corporate formatting** - Clean, professional appearance with customizable styling
+- **Auto-split large tables** - Automatically splits large tables across multiple slides
+- **Header repetition** - Optionally repeat headers on split slides
 
-### 📊 **Smart Scaling**
-- **Automatic fit**: Always scales to fit within slide boundaries
-- **Font optimization**: 6-12pt scaling based on table size
-- **Content-driven sizing**: Headers get priority for width calculation
-- **Proportional scaling**: Maintains readability while fitting slides
+### User-Friendly Interface
+- **Drag-and-drop upload** - Easy file uploading with visual feedback
+- **Live preview** - See how slides will look before conversion
+- **Table range selector** - Interactive selection of data ranges
+- **Formatting options** - Customize fonts, alignment, and spacing
+- **Progress tracking** - Real-time conversion progress indicators
 
-## 🚀 Setup
+## 🏗️ Architecture
 
-### Prerequisites
-- Python 3.7+
-- pip package manager
+### Technology Stack
+- **Frontend**: React 18 with TypeScript, Tailwind CSS
+- **Backend**: FastAPI with Python 3.8+
+- **File Processing**: openpyxl for Excel, python-pptx for PowerPoint
+- **Data Analysis**: pandas for data manipulation
+- **Containerization**: Docker and Docker Compose
 
-### Installation
-
-1. **Clone or download this project**
-
-2. **Create a virtual environment** (required for externally managed Python environments):
-```bash
-python3 -m venv venv
+### System Architecture
+```
+┌─────────────────┐    HTTP/REST API    ┌─────────────────┐
+│  React Frontend │ ◄─────────────────► │  FastAPI Backend │
+│   (Port 3000)   │                     │   (Port 5000)    │
+└─────────────────┘                     └─────────────────┘
+        │                                        │
+        │                                        │
+        ▼                                        ▼
+┌─────────────────┐                     ┌─────────────────┐
+│   Static Files  │                     │  File Processing │
+│   (Nginx Proxy) │                     │   (Temp Storage) │
+└─────────────────┘                     └─────────────────┘
 ```
 
-3. **Activate the virtual environment**:
-```bash
-# On Linux/Mac:
-source venv/bin/activate
+## 📋 Prerequisites
 
+### Required Software
+- **Docker** 20.10+ and Docker Compose 2.0+
+- **Node.js** 16+ (for local development)
+- **Python** 3.8+ (for local development)
+- **Git** (for version control)
+
+### System Requirements
+- **RAM**: 4GB minimum, 8GB recommended
+- **Storage**: 1GB free space for dependencies
+- **Network**: Internet connection for initial setup
+
+## 🛠️ Installation & Setup
+
+### Quick Start with Docker (Recommended)
+
+1. **Clone the repository**
+```bash
+git clone <repository-url>
+cd excel2powerpoint
+```
+
+2. **Start the application**
+```bash
+docker-compose up --build
+```
+
+3. **Access the application**
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:5000
+- API Documentation: http://localhost:5000/docs
+
+### Local Development Setup
+
+#### Backend Setup
+```bash
+# Navigate to backend directory
+cd backend
+
+# Create virtual environment
+python -m venv venv
+
+# Activate virtual environment
+# On Linux/macOS:
+source venv/bin/activate
 # On Windows:
 venv\Scripts\activate
-```
 
-4. **Install dependencies**:
-```bash
+# Install dependencies
 pip install -r requirements.txt
+
+# Run the backend server
+uvicorn main:app --reload --host 0.0.0.0 --port 5000
 ```
 
-5. **Run the application**:
+#### Frontend Setup
 ```bash
-python app.py
+# Navigate to frontend directory
+cd frontend
+
+# Install dependencies
+npm install
+
+# Start development server
+npm start
 ```
 
-6. **Open your browser** and navigate to `http://localhost:5000`
+## 📖 Usage Guide
 
-## 📖 Usage
+### Basic Usage
 
-1. **Upload**: Click "Choose File" and select an Excel (.xlsx) file
-2. **Convert**: Click "Convert to PowerPoint" 
-3. **Download**: The converted PowerPoint file automatically downloads
-4. **Open**: View your perfectly formatted slides in PowerPoint
+1. **Upload Excel File**
+   - Click "Upload Excel File" or drag and drop your .xlsx file
+   - The application will analyze the file and display available worksheets
 
-## 🔧 Technical Details
+2. **Select Data Ranges**
+   - Choose worksheets and specific data ranges to convert
+   - Preview the data to ensure correct selection
+   - The system automatically detects table structures
 
-### Supported Excel Features:
-- ✅ **Multiple worksheets** (each becomes a separate slide)
-- ✅ **Merged cells** (preserved exactly as in Excel)
-- ✅ **Cell background colors** (exact color matching)
-- ✅ **Font styling** (bold, italic, color, size)
-- ✅ **Text alignment** (left, center, right)
-- ✅ **Complex data types** (numbers, text, formulas)
-- ✅ **Large tables** (tested with 50+ rows, 20+ columns)
+3. **Configure Formatting**
+   - Adjust font size, family, and alignment
+   - Set row/column spacing and slide orientation
+   - Configure options for large table handling
 
-### PowerPoint Output:
-- **Shape-based tables**: Individual text boxes for precise control
-- **Variable column widths**: Content-optimized sizing  
-- **Corporate formatting**: Clean, professional appearance
-- **Perfect fit**: Always within slide boundaries (9.0" × 6.6" usable area)
-- **Standard dimensions**: 16:9 PowerPoint slides
-- **No artifacts**: Zero drop shadows or unwanted effects
+4. **Generate Slides**
+   - Click "Generate Slides" to start conversion
+   - Monitor progress through the status indicator
+   - Download the generated PowerPoint file
 
-### Advanced Implementation:
-- **Smart algorithm**: Analyzes content length and font sizes
-- **Header priority**: Extra width allocation for header text
-- **Merged cell mapping**: Tracks all merged ranges and dimensions  
-- **Cumulative positioning**: Mathematical precision for shape placement
-- **Memory efficient**: Proper cleanup of temporary files
+### Advanced Features
 
-## 🌐 Deployment
+#### Table Range Selection
+- **Auto-detection**: System automatically identifies data regions
+- **Manual selection**: Specify exact cell ranges (e.g., A1:Z100)
+- **Multi-range support**: Select multiple ranges from the same sheet
 
-### Render (Recommended)
-1. Connect your GitHub repository to Render
-2. Set the build command: `pip install -r requirements.txt`
-3. Set the start command: `python app.py`
-4. Deploy!
+#### Formatting Options
+- **Font settings**: Size (8-24pt), family (Arial, Times New Roman, etc.)
+- **Alignment**: Left, center, right alignment for tables
+- **Spacing**: Adjust row and column spacing (0.5x - 2.0x)
+- **Orientation**: Horizontal (16:9) or vertical (4:3) slides
 
-### Other Platforms
-- **Vercel**: Compatible with Python runtime
-- **Heroku**: Use Procfile with `web: python app.py`
-- **AWS/GCP**: Container deployment ready
+#### Large Table Handling
+- **Auto-split**: Automatically split tables exceeding row limits
+- **Header repetition**: Repeat headers on each split slide
+- **Custom limits**: Set maximum rows per slide (10-50 rows)
 
-### Local Development
-- Runs on `http://localhost:5000` by default
-- Debug mode enabled for development
-- Hot reload on file changes
+## 🔌 API Documentation
 
-## 📁 Project Structure
-```
-Excel2PowerPoint/
-├── app.py              # Main Flask application with shape-based table engine
-├── requirements.txt    # Python dependencies
-├── templates/
-│   └── index.html     # Modern upload interface
-├── static/
-│   └── style.css      # Responsive styling with gradient background
-├── claude.md          # Project documentation for Claude
-├── README.md          # This file
-└── venv/              # Virtual environment (created during setup)
+### Core Endpoints
+
+#### `POST /api/analyze-excel`
+Analyzes uploaded Excel file and returns sheet information.
+
+**Request**: Multipart form data with Excel file
+**Response**: 
+```json
+{
+  "file_id": "unique_file_identifier",
+  "sheets": [
+    {
+      "name": "Sheet1",
+      "rows": 100,
+      "columns": 10,
+      "tables": [...],
+      "data_preview": [...]
+    }
+  ]
+}
 ```
 
-## 🛡️ Error Handling & Validation
+#### `POST /api/preview-slide`
+Generates preview of how a slide will look.
 
-- **File type validation**: Only .xlsx files accepted
-- **Size limits**: 16MB maximum file size
-- **Empty worksheet detection**: Skips worksheets with no data
-- **Graceful error handling**: Clear error messages for users
-- **Memory management**: Automatic cleanup of uploaded files
-- **Data range validation**: Handles edge cases and malformed data
+**Request**:
+```json
+{
+  "file_id": "file_identifier",
+  "table_range": {
+    "sheet_name": "Sheet1",
+    "start_cell": "A1",
+    "end_cell": "Z100",
+    "has_headers": true
+  },
+  "formatting": {
+    "font_size": 10,
+    "font_family": "Arial",
+    "table_alignment": "center"
+  }
+}
+```
 
-## 🎯 Performance
+#### `POST /api/convert-to-pptx`
+Converts selected ranges to PowerPoint presentation.
 
-- **Fast processing**: Large tables (1,000+ cells) processed in seconds
-- **Efficient memory usage**: Streams data without loading entire files
-- **Scalable architecture**: Handles multiple concurrent users
-- **Optimized output**: Minimal file sizes with maximum quality
+**Request**: ConversionRequest with selected ranges and formatting options
+**Response**: PowerPoint file download
 
-## 💼 Corporate Ready
+#### Health Check Endpoints
+- `GET /health` - Backend health status
+- `GET /api/health` - API health status
 
-This tool produces PowerPoint presentations that meet professional corporate standards:
-- Clean, shadow-free appearance
-- Consistent formatting across slides  
-- Readable fonts with optimal sizing
-- Perfect slide boundary compliance
-- Excel-accurate data representation
+## 🐳 Docker Setup
 
-Perfect for business reports, data presentations, and executive dashboards!
+### Development Environment
+```bash
+# Start services in development mode
+docker-compose up --build
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+```
+
+### Production Environment
+```bash
+# Use production configuration
+docker-compose -f docker-compose.prod.yml up --build -d
+
+# Scale services
+docker-compose -f docker-compose.prod.yml up --scale backend=3 -d
+```
+
+### Docker Configuration
+
+#### Environment Variables
+- `PORT`: Backend server port (default: 5000)
+- `MAX_UPLOAD_SIZE`: Maximum file upload size (default: 100MB)
+- `CORS_ORIGINS`: Allowed CORS origins
+- `NODE_ENV`: Node environment (development/production)
+- `REACT_APP_API_URL`: Frontend API URL
+
+#### Volume Mounts
+- `./backend/uploads:/app/uploads` - File upload storage
+- `./backend/temp:/app/temp` - Temporary file processing
+
+## 💻 Development
+
+### Project Structure
+```
+excel2powerpoint/
+├── backend/                    # FastAPI backend
+│   ├── main.py                # Main application file
+│   ├── requirements.txt       # Python dependencies
+│   ├── Dockerfile            # Backend Docker configuration
+│   ├── static/               # Static assets
+│   ├── templates/            # HTML templates
+│   ├── uploads/              # File upload directory
+│   └── temp/                 # Temporary file storage
+├── frontend/                  # React frontend
+│   ├── src/
+│   │   ├── components/       # React components
+│   │   │   ├── FileUpload.tsx
+│   │   │   ├── FormatOptions.tsx
+│   │   │   ├── SlidePreview.tsx
+│   │   │   └── TableSelector.tsx
+│   │   ├── services/         # API services
+│   │   │   └── api.ts
+│   │   ├── types/            # TypeScript types
+│   │   │   └── index.ts
+│   │   └── App.tsx           # Main app component
+│   ├── package.json          # Node dependencies
+│   ├── Dockerfile            # Frontend Docker configuration
+│   └── tailwind.config.js    # Tailwind CSS configuration
+├── nginx/                     # Nginx configuration
+│   └── nginx.prod.conf       # Production Nginx config
+├── docker-compose.yml        # Development Docker Compose
+├── docker-compose.prod.yml   # Production Docker Compose
+└── README.md                 # This file
+```
+
+### Development Commands
+
+#### Backend Development
+```bash
+# Install development dependencies
+pip install -r requirements.txt
+
+# Run with hot reload
+uvicorn main:app --reload --host 0.0.0.0 --port 5000
+
+# Run tests
+python -m pytest
+
+# Format code
+black .
+```
+
+#### Frontend Development
+```bash
+# Install dependencies
+npm install
+
+# Start development server
+npm start
+
+# Build for production
+npm run build
+
+# Run tests
+npm test
+```
+
+### Code Quality
+
+#### Backend Standards
+- **Linting**: flake8, black
+- **Type checking**: mypy
+- **Testing**: pytest
+- **Documentation**: Docstrings for all functions
+
+#### Frontend Standards
+- **Linting**: ESLint, Prettier
+- **Type checking**: TypeScript strict mode
+- **Testing**: React Testing Library
+- **Styling**: Tailwind CSS utility classes
+
+## 📁 Project Components
+
+### Backend Components
+- **File Analysis**: Excel file parsing and table detection
+- **Data Processing**: Cell value extraction and formatting
+- **PowerPoint Generation**: Shape-based table creation
+- **API Layer**: RESTful endpoints for frontend communication
+
+### Frontend Components
+- **FileUpload**: Drag-and-drop file upload with validation
+- **TableSelector**: Interactive table range selection
+- **FormatOptions**: Formatting configuration panel
+- **SlidePreview**: Live preview of generated slides
+
+### Key Features Implementation
+- **Smart Table Detection**: Analyzes cell patterns to identify tables
+- **Responsive Design**: Works on desktop and mobile devices
+- **Error Handling**: Comprehensive error handling and user feedback
+- **Performance**: Optimized for large file processing
+
+## 🤝 Contributing
+
+### Getting Started
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Make your changes and add tests
+4. Commit your changes: `git commit -m 'Add amazing feature'`
+5. Push to the branch: `git push origin feature/amazing-feature`
+6. Open a Pull Request
+
+### Development Guidelines
+- Follow the existing code style and conventions
+- Add tests for new features
+- Update documentation for API changes
+- Ensure Docker builds pass
+- Test both frontend and backend changes
+
+### Code Review Process
+- All changes require review before merging
+- Automated tests must pass
+- Documentation must be updated
+- Performance impact should be considered
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🔧 Troubleshooting
+
+### Common Issues
+
+#### "File not found" errors
+- Ensure the uploaded file is in .xlsx format
+- Check file permissions and size limits
+- Verify the file is not corrupted
+
+#### Docker build failures
+```bash
+# Clean Docker cache
+docker system prune -af
+
+# Rebuild without cache
+docker-compose build --no-cache
+```
+
+#### Frontend not connecting to backend
+- Check if backend is running on port 5000
+- Verify CORS settings in backend configuration
+- Check firewall and network settings
+
+#### Memory issues with large files
+- Increase Docker memory limits
+- Process files in smaller chunks
+- Check available system memory
+
+### Performance Optimization
+
+#### Large File Processing
+- Split large tables across multiple slides
+- Reduce image quality for faster processing
+- Use streaming for file uploads
+
+#### Memory Usage
+- Monitor Docker container memory usage
+- Implement file cleanup after processing
+- Use pagination for large datasets
+
+### Debug Mode
+
+#### Backend Debugging
+```bash
+# Enable debug logging
+export LOG_LEVEL=DEBUG
+uvicorn main:app --reload --log-level debug
+```
+
+#### Frontend Debugging
+```bash
+# Enable verbose logging
+export REACT_APP_DEBUG=true
+npm start
+```
+
+## 🆘 Support
+
+### Getting Help
+- Check the [Issues](https://github.com/your-repo/excel2powerpoint/issues) page
+- Review the [API Documentation](http://localhost:5000/docs)
+- Contact the development team
+
+### Reporting Issues
+Please include:
+- Operating system and version
+- Docker version (if using Docker)
+- Steps to reproduce the issue
+- Expected vs actual behavior
+- Sample files (if applicable)
+
+---
+
+**Made with ❤️ for seamless Excel to PowerPoint conversion**
