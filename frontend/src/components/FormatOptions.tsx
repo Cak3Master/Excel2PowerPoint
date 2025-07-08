@@ -15,8 +15,8 @@ export const FormatOptions: React.FC<FormatOptionsProps> = ({ options, onChange 
   };
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <h3 className="text-lg font-semibold mb-4">Formatting Options</h3>
+    <div className="bg-white rounded-lg shadow-lg p-6" style={{ borderTop: '4px solid #006FCF' }}>
+      <h3 className="text-lg font-semibold mb-4" style={{ color: '#006FCF' }}>Formatting Options</h3>
       
       <div className="space-y-4">
         {/* Font Size */}
@@ -30,7 +30,8 @@ export const FormatOptions: React.FC<FormatOptionsProps> = ({ options, onChange 
             max="72"
             value={options.font_size}
             onChange={(e) => handleChange('font_size', parseInt(e.target.value))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2"
+            style={{ '--tw-ring-color': '#006FCF' } as any}
           />
         </div>
 
@@ -42,7 +43,8 @@ export const FormatOptions: React.FC<FormatOptionsProps> = ({ options, onChange 
           <select
             value={options.font_family}
             onChange={(e) => handleChange('font_family', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2"
+            style={{ '--tw-ring-color': '#006FCF' } as any}
           >
             <option value="Calibri">Calibri</option>
             <option value="Arial">Arial</option>
@@ -60,7 +62,8 @@ export const FormatOptions: React.FC<FormatOptionsProps> = ({ options, onChange 
           <select
             value={options.table_alignment}
             onChange={(e) => handleChange('table_alignment', e.target.value as 'center' | 'left' | 'right')}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2"
+            style={{ '--tw-ring-color': '#006FCF' } as any}
           >
             <option value="center">Center</option>
             <option value="left">Left</option>
@@ -80,7 +83,8 @@ export const FormatOptions: React.FC<FormatOptionsProps> = ({ options, onChange 
             step="0.5"
             value={options.row_spacing}
             onChange={(e) => handleChange('row_spacing', parseFloat(e.target.value))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2"
+            style={{ '--tw-ring-color': '#006FCF' } as any}
           />
         </div>
 
@@ -96,7 +100,8 @@ export const FormatOptions: React.FC<FormatOptionsProps> = ({ options, onChange 
             step="0.5"
             value={options.column_spacing}
             onChange={(e) => handleChange('column_spacing', parseFloat(e.target.value))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2"
+            style={{ '--tw-ring-color': '#006FCF' } as any}
           />
         </div>
 

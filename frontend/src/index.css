@@ -4,14 +4,88 @@
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: 'Helvetica Neue', Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-color: #f7f8fa;
 }
 
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
+}
+
+/* NUCLEAR OPTION - Remove ALL borders from everything */
+* {
+  border: none !important;
+}
+
+/* Allow only specific header borders */
+table thead th {
+  border: 1px solid #d1d5db !important;
+}
+
+/* MAXIMUM SPECIFICITY - Multiple selectors for each rule */
+.excel-cell-no-borders,
+td.excel-cell-no-borders,
+table td.excel-cell-no-borders,
+table.border-separate td.excel-cell-no-borders,
+div table td.excel-cell-no-borders,
+.bg-white table td.excel-cell-no-borders,
+[class*="excel-cell-no-borders"] {
+  border: none !important;
+  border-top: none !important;
+  border-bottom: none !important;
+  border-left: none !important;
+  border-right: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  border-width: 0 !important;
+  border-style: none !important;
+  border-color: transparent !important;
+}
+
+.excel-cell-horizontal-border,
+td.excel-cell-horizontal-border,
+table td.excel-cell-horizontal-border,
+table.border-separate td.excel-cell-horizontal-border,
+div table td.excel-cell-horizontal-border,
+.bg-white table td.excel-cell-horizontal-border {
+  border: none !important;
+  border-top: none !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-bottom: 1px solid #e5e7eb !important;
+  border-width: 0 0 1px 0 !important;
+  border-style: none none solid none !important;
+}
+
+.excel-cell-vertical-border,
+td.excel-cell-vertical-border,
+table td.excel-cell-vertical-border,
+table.border-separate td.excel-cell-vertical-border,
+div table td.excel-cell-vertical-border,
+.bg-white table td.excel-cell-vertical-border {
+  border: none !important;
+  border-top: none !important;
+  border-left: none !important;
+  border-bottom: none !important;
+  border-right: 1px solid #e5e7eb !important;
+  border-width: 0 1px 0 0 !important;
+  border-style: none solid none none !important;
+}
+
+.excel-cell-both-borders,
+td.excel-cell-both-borders,
+table td.excel-cell-both-borders,
+table.border-separate td.excel-cell-both-borders,
+div table td.excel-cell-both-borders,
+.bg-white table td.excel-cell-both-borders {
+  border: none !important;
+  border-top: none !important;
+  border-left: none !important;
+  border-right: 1px solid #e5e7eb !important;
+  border-bottom: 1px solid #e5e7eb !important;
+  border-width: 0 1px 1px 0 !important;
+  border-style: none solid solid none !important;
 }

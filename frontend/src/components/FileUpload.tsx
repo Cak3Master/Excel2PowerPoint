@@ -28,8 +28,11 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect, disabled }
   return (
     <div
       className={`border-2 border-dashed rounded-lg p-8 text-center ${
-        disabled ? 'border-gray-300 bg-gray-50' : 'border-blue-400 hover:border-blue-600'
+        disabled ? 'border-gray-300 bg-gray-50' : 'hover:border-blue-600'
       } transition-colors`}
+      style={{
+        borderColor: disabled ? '#d1d5db' : '#006FCF'
+      }}
       onDrop={handleDrop}
       onDragOver={handleDragOver}
     >
@@ -50,8 +53,11 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect, disabled }
       <label
         htmlFor="file-upload"
         className={`mt-2 block text-sm font-medium ${
-          disabled ? 'text-gray-500 cursor-not-allowed' : 'text-blue-600 hover:text-blue-700 cursor-pointer'
+          disabled ? 'text-gray-500 cursor-not-allowed' : 'hover:text-blue-700 cursor-pointer'
         }`}
+        style={{
+          color: disabled ? '#6b7280' : '#006FCF'
+        }}
       >
         <span>Upload an Excel file or drag and drop</span>
         <input

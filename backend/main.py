@@ -11,6 +11,7 @@ from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
+from pptx.enum.shapes import MSO_SHAPE
 import tempfile
 import os
 import io
@@ -18,6 +19,46 @@ import base64
 from datetime import datetime
 import json
 import uuid
+
+def rgb_to_hex(rgb_str):
+    """Convert RGB string to hex color"""
+    if not rgb_str or rgb_str == '00000000' or rgb_str == 'FFFFFFFF':
+        return None
+    try:
+        # Handle different input formats
+        if isinstance(rgb_str, str):
+            # Remove alpha channel if present
+            if len(rgb_str) == 8:
+                rgb_str = rgb_str[2:]  # Skip alpha channel (ARGB -> RGB)
+            elif len(rgb_str) == 6:
+                pass  # Already RGB
+            else:
+                return None
+        # Convert to RGB tuple
+        return tuple(int(rgb_str[i:i+2], 16) for i in (0, 2, 4))
+    except:
+        return None
+
+def get_cell_background_color(cell):
+    """Extract background color from Excel cell"""
+    if not cell.fill:
+        return None
+        
+    bg_color = None
+    if hasattr(cell.fill, 'fgColor') and cell.fill.fgColor:
+        if hasattr(cell.fill.fgColor, 'rgb') and cell.fill.fgColor.rgb:
+            bg_color = rgb_to_hex(str(cell.fill.fgColor.rgb))
+        elif hasattr(cell.fill.fgColor, 'indexed') and cell.fill.fgColor.indexed is not None:
+            # Handle indexed colors (Excel's built-in color palette)
+            try:
+                from openpyxl.styles.colors import COLOR_INDEX
+                if cell.fill.fgColor.indexed < len(COLOR_INDEX):
+                    indexed_color = COLOR_INDEX[cell.fill.fgColor.indexed]
+                    if indexed_color != 'FF000000':  # Not black
+                        bg_color = rgb_to_hex(indexed_color[2:])  # Remove FF prefix
+            except:
+                pass
+    return bg_color
 
 app = FastAPI()
 
@@ -47,6 +88,15 @@ class FormattingOptions(BaseModel):
     repeat_headers: bool = True
     auto_split: bool = True
     max_rows_per_slide: int = 20
+    # Preview editor settings
+    column_widths: List[float] = []
+    row_heights: List[float] = []
+    show_gridlines: bool = True
+    show_horizontal_gridlines: bool = True
+    show_vertical_gridlines: bool = True
+    preview_rows: int = 50
+    preview_columns: int = 20
+    header_rows: int = 1
 
 class ConversionRequest(BaseModel):
     file_id: str
@@ -136,15 +186,13 @@ async def analyze_excel(file: UploadFile = File(...)):
         sheets_info = []
         for sheet_name in wb.sheetnames:
             ws = wb[sheet_name]
-            tables = detect_tables_in_sheet(ws)
-            preview = get_data_preview(ws)
             
             sheet_info = SheetInfo(
                 name=sheet_name,
                 rows=ws.max_row,
                 columns=ws.max_column,
-                tables=tables,
-                data_preview=preview
+                tables=[],  # No longer detecting tables automatically
+                data_preview=get_data_preview(ws)
             )
             sheets_info.append(sheet_info.dict())
         
@@ -155,8 +203,7 @@ async def analyze_excel(file: UploadFile = File(...)):
         with open(file_path, 'wb') as f:
             f.write(content)
         
-        # Extract tables from all sheets for the frontend
-        all_tables = []
+        # Extract only worksheets for the frontend
         worksheets = []
         
         for sheet_info in sheets_info:
@@ -168,25 +215,12 @@ async def analyze_excel(file: UploadFile = File(...)):
                 "has_data": len(sheet_info["data_preview"]) > 0
             }
             worksheets.append(worksheet)
-            
-            # Add tables with unique IDs
-            for i, table in enumerate(sheet_info["tables"]):
-                table_obj = {
-                    "id": f"{sheet_info['name']}_table_{i}",
-                    "name": f"Table {i+1}",
-                    "worksheet": sheet_info["name"],
-                    "range": f"{table['start_cell']}:{table['end_cell']}",
-                    "rows": table["rows"],
-                    "columns": table["columns"],
-                    "display_name": f"{sheet_info['name']} - Table {i+1} ({table['start_cell']}:{table['end_cell']})"
-                }
-                all_tables.append(table_obj)
         
         return {
             "message": "Excel file analyzed successfully",
             "file_id": file_id,
             "worksheets": worksheets,
-            "tables": all_tables
+            "tables": []  # Empty array for backward compatibility
         }
         
     except Exception as e:
@@ -196,6 +230,8 @@ class PreviewRequest(BaseModel):
     file_id: str
     table_id: str
     options: FormattingOptions
+    preview_rows: int = 50
+    preview_columns: int = 20
 
 @app.post("/api/preview-slide")
 async def preview_slide(request: PreviewRequest):
@@ -241,14 +277,21 @@ async def preview_slide(request: PreviewRequest):
             start_col = column_index_from_string(start_col)
             end_col = column_index_from_string(end_col)
         
-        # Get table data as simple strings
+        # Get table data with formatting
         table_data = []
-        for row in range(start_row, min(end_row + 1, start_row + 50)):  # Limit to 50 rows for preview
+        for row in range(start_row, min(end_row + 1, start_row + request.preview_rows)):  # Limit rows for preview
             row_data = []
-            for col in range(start_col, min(end_col + 1, start_col + 20)):  # Limit to 20 columns for preview
+            for col in range(start_col, min(end_col + 1, start_col + request.preview_columns)):  # Limit columns for preview
                 cell = ws.cell(row=row, column=col)
-                value = str(cell.value) if cell.value is not None else ""
-                row_data.append(value)
+                bg_color = get_cell_background_color(cell)
+                cell_data = {
+                    "value": str(cell.value) if cell.value is not None else "",
+                    "font_bold": cell.font.bold if cell.font else False,
+                    "font_color": cell.font.color.rgb if cell.font and cell.font.color and cell.font.color.rgb else "000000",
+                    "fill_color": bg_color,
+                    "alignment": cell.alignment.horizontal if cell.alignment else "left"
+                }
+                row_data.append(cell_data)
             table_data.append(row_data)
         
         # Calculate dimensions
@@ -268,133 +311,372 @@ async def preview_slide(request: PreviewRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-def create_slide_with_table(prs, table_data, formatting, title=""):
-    """Create a slide with a table using shape-based approach"""
-    slide_layout = prs.slide_layouts[5]  # Blank slide
-    slide = prs.slides.add_slide(slide_layout)
+def get_cell_display_value(cell_data):
+    """Get the display value of a cell as it appears in the frontend"""
+    if not cell_data or not cell_data.get("value"):
+        return ""
+    return str(cell_data.get("value", ""))
+
+def create_grouped_shape_table(slide, table_data, formatting, left, top, title=""):
+    """Create a resizable grouped shape table that mimics Excel layout exactly"""
+    print(f"Creating grouped shape table. Title: {title}")
+    print(f"Table data dimensions: {len(table_data)} rows, {len(table_data[0]) if table_data else 0} columns")
     
-    # Set slide dimensions
-    slide_width = prs.slide_width
-    slide_height = prs.slide_height
-    
-    # Calculate margins
-    left_margin = Inches(0.5)
-    top_margin = Inches(1.0) if title else Inches(0.5)
-    right_margin = Inches(0.5)
-    bottom_margin = Inches(0.5)
-    
-    # Add title if provided
-    if title:
-        title_box = slide.shapes.add_textbox(left_margin, Inches(0.2), slide_width - left_margin - right_margin, Inches(0.5))
-        title_frame = title_box.text_frame
-        title_frame.text = title
-        title_frame.paragraphs[0].font.size = Pt(18)
-        title_frame.paragraphs[0].font.bold = True
-    
-    # Calculate available space
-    available_width = slide_width - left_margin - right_margin
-    available_height = slide_height - top_margin - bottom_margin
-    
-    # Calculate cell dimensions
     num_rows = len(table_data)
     num_cols = len(table_data[0]) if table_data else 0
     
     if num_rows == 0 or num_cols == 0:
-        return slide
+        print(f"No table data to render: {num_rows} rows, {num_cols} columns")
+        return None
     
-    # Calculate column widths based on content
-    col_widths = []
-    for col_idx in range(num_cols):
-        max_width = 50  # Minimum width
-        for row_idx in range(num_rows):
-            cell_text = table_data[row_idx][col_idx].get("value", "")
-            # Estimate width based on character count
-            estimated_width = len(str(cell_text)) * 7 + 20  # 7 pixels per char + padding
-            max_width = max(max_width, estimated_width)
-        col_widths.append(max_width)
+    # Calculate table dimensions - EXTREMELY generous for column widths
+    max_table_width = 20.0  # inches - increased from 12.0 to prevent ANY wrapping
+    max_table_height = 6.5 if title else 7.2  # inches
     
-    # Scale column widths to fit available width
-    total_width = sum(col_widths)
-    if total_width > 0:
-        scale_factor = float(available_width) / total_width / 72  # Convert to inches
-        col_widths = [w * scale_factor for w in col_widths]
+    # Use custom column widths if provided, otherwise calculate optimal widths
+    print(f"🔍 DEBUG: formatting.column_widths = {formatting.column_widths}")
+    print(f"🔍 DEBUG: num_cols = {num_cols}")
+    print(f"🔍 DEBUG: len(column_widths) = {len(formatting.column_widths) if formatting.column_widths else 'None'}")
+    
+    if formatting.column_widths and len(formatting.column_widths) >= num_cols:
+        # Simple proportional scaling - direct ratio preservation
+        custom_widths = formatting.column_widths[:num_cols]
+        print(f"🔄 NEW PROPORTIONAL SCALING - Received custom column widths: {custom_widths[:5]}")
+        
+        # Calculate the total proportional units
+        total_width_units = sum(custom_widths)
+        
+        # Convert pixel widths to inches EXTREMELY generously
+        # Use a very generous pixel-to-inch conversion (60 DPI instead of 72)
+        col_widths = []
+        for width_pixels in custom_widths:
+            # Convert pixels to inches using 60 DPI for EXTREMELY generous sizing
+            width_inches = width_pixels / 60.0  # Even more generous than 72 DPI
+            col_widths.append(width_inches)
+        
+        print(f"Proportional column widths: {[f'{w:.3f}in' for w in col_widths[:5]]}")
+        
+        # Ensure minimum column width but don't scale down
+        min_width = 1.0  # Increased minimum width to 1 inch
+        for i, width in enumerate(col_widths):
+            if width < min_width:
+                col_widths[i] = min_width
+        
+        print(f"Final column widths: {[f'{w:.3f}in' for w in col_widths[:5]]}")
     else:
-        col_widths = [available_width / num_cols for _ in range(num_cols)]
+        # Calculate optimal column widths based on content
+        col_widths = []
+        for col_idx in range(num_cols):
+            max_content_length = 0
+            for row_idx in range(num_rows):
+                cell_data = table_data[row_idx][col_idx]
+                text_value = get_cell_display_value(cell_data)
+                content_length = len(text_value)
+                max_content_length = max(max_content_length, content_length)
+            
+            # Calculate required width based on content
+            char_width = 0.15  # Generous character width
+            required_width = max(max_content_length * char_width + 0.3, 0.8)  # Minimum 0.8"
+            col_widths.append(required_width)
+        
+        # Don't scale down column widths - let them be as wide as needed
+        # This prevents text wrapping in PowerPoint
+        print(f"Using content-based column widths without scaling: {[f'{w:.3f}in' for w in col_widths[:5]]}")
     
-    # Calculate row height
-    row_height = min(available_height / num_rows, Inches(0.5))
+    # Use custom row heights if provided, otherwise uniform
+    if formatting.row_heights and len(formatting.row_heights) >= num_rows:
+        # Convert custom heights from pixels to inches with conservative scaling
+        custom_heights = formatting.row_heights[:num_rows]
+        
+        # Convert pixels to inches (96 DPI is standard for web)
+        row_heights = [h / 96 for h in custom_heights]  # Direct pixel to inch conversion
+        
+        # Only scale down if the total height exceeds available space
+        total_height = sum(row_heights)
+        if total_height > max_table_height:
+            # Conservative scaling - only scale down when necessary
+            scale_factor = max_table_height / total_height
+            row_heights = [h * scale_factor for h in row_heights]
+            print(f"Scaled row heights down by factor {scale_factor:.3f} to fit slide")
+        
+        print(f"Using custom row heights: {[f'{h:.2f}in' for h in row_heights]}") 
+        
+        # Ensure minimum row height
+        row_heights = [max(h, 0.15) for h in row_heights]  # Minimum 0.15 inch per row
+    else:
+        row_height = min(max_table_height / num_rows, 0.4)  # Max 0.4" per row
+        row_heights = [row_height for _ in range(num_rows)]
     
-    # Create table using shapes
-    current_top = top_margin
+    # Calculate actual table dimensions
+    table_width = sum(col_widths)
+    table_height = sum(row_heights)
     
+    # Determine font size based on cell dimensions
+    avg_col_width = table_width / num_cols
+    avg_row_height = table_height / num_rows
+    min_dimension = min(avg_col_width, avg_row_height)
+    
+    if min_dimension < 0.1:
+        font_size = 6
+    elif min_dimension < 0.15:
+        font_size = 7
+    elif min_dimension < 0.2:
+        font_size = 8
+    elif min_dimension < 0.25:
+        font_size = 9
+    elif min_dimension < 0.3:
+        font_size = 10
+    elif min_dimension < 0.4:
+        font_size = 11
+    else:
+        font_size = 12
+    
+    # Override font size if specified in formatting
+    if hasattr(formatting, 'font_size') and formatting.font_size:
+        font_size = formatting.font_size
+    
+    print(f"Table dimensions: {table_width:.2f}\" x {table_height:.2f}\"")
+    print(f"Font size: {font_size}pt")
+    
+    # List to collect all shapes for grouping
+    all_shapes = []
+    
+    # Create background rectangle for the entire table
+    table_bg = slide.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE,
+        left,
+        top,
+        Inches(table_width),
+        Inches(table_height)
+    )
+    table_bg.fill.solid()
+    table_bg.fill.fore_color.rgb = RGBColor(255, 255, 255)  # White background
+    table_bg.line.fill.background()  # No border
+    table_bg.shadow.inherit = False  # Remove drop shadow
+    all_shapes.append(table_bg)
+    
+    # Create individual cell shapes
+    current_top_offset = 0
     for row_idx in range(num_rows):
-        current_left = left_margin
+        current_left_offset = 0
+        current_row_height = row_heights[row_idx]
         
         for col_idx in range(num_cols):
             cell_data = table_data[row_idx][col_idx]
-            cell_width = col_widths[col_idx]
+            current_col_width = col_widths[col_idx]
             
-            # Create text box for cell
-            text_box = slide.shapes.add_textbox(
-                current_left, current_top, 
-                cell_width, row_height
-            )
+            # Calculate cell position
+            cell_left = left + Inches(current_left_offset)
+            cell_top = top + Inches(current_top_offset)
+            cell_width = Inches(current_col_width)
+            cell_height = Inches(current_row_height)
             
-            # Add border
-            line = text_box.line
-            line.color.rgb = RGBColor(200, 200, 200)
-            line.width = Pt(0.5)
-            
-            # Set fill color
-            if cell_data.get("fill_color") and cell_data["fill_color"] != "FFFFFF":
-                fill = text_box.fill
-                fill.solid()
+            # Create cell background if it has color
+            if cell_data.get("fill_color"):
+                cell_bg = slide.shapes.add_shape(
+                    MSO_SHAPE.RECTANGLE,
+                    cell_left,
+                    cell_top,
+                    cell_width,
+                    cell_height
+                )
+                cell_bg.fill.solid()
                 try:
-                    rgb_hex = cell_data["fill_color"]
-                    if len(rgb_hex) == 8:  # ARGB format
-                        rgb_hex = rgb_hex[2:]  # Remove alpha
-                    r = int(rgb_hex[0:2], 16)
-                    g = int(rgb_hex[2:4], 16)
-                    b = int(rgb_hex[4:6], 16)
-                    fill.fore_color.rgb = RGBColor(r, g, b)
-                except:
-                    pass
+                    color = cell_data["fill_color"]
+                    if isinstance(color, (list, tuple)) and len(color) == 3:
+                        r, g, b = color
+                        cell_bg.fill.fore_color.rgb = RGBColor(r, g, b)
+                    elif isinstance(color, str) and len(color) >= 6:
+                        rgb_hex = color
+                        if len(rgb_hex) == 8:
+                            rgb_hex = rgb_hex[2:]
+                        r = int(rgb_hex[0:2], 16)
+                        g = int(rgb_hex[2:4], 16)
+                        b = int(rgb_hex[4:6], 16)
+                        cell_bg.fill.fore_color.rgb = RGBColor(r, g, b)
+                except Exception as e:
+                    print(f"Error setting cell background color: {e}")
+                    cell_bg.fill.fore_color.rgb = RGBColor(255, 255, 255)
+                
+                cell_bg.line.fill.background()  # No border on colored cells
+                cell_bg.shadow.inherit = False  # Remove drop shadow
+                all_shapes.append(cell_bg)
             
-            # Add text
-            text_frame = text_box.text_frame
-            text_frame.margin_left = Pt(5)
-            text_frame.margin_right = Pt(5)
-            text_frame.margin_top = Pt(2)
-            text_frame.margin_bottom = Pt(2)
-            text_frame.word_wrap = True
+            # Add text box for cell content
+            text_value = get_cell_display_value(cell_data)
+            if text_value:
+                text_box = slide.shapes.add_textbox(
+                    cell_left,
+                    cell_top,
+                    cell_width,
+                    cell_height
+                )
+                text_box.shadow.inherit = False  # Remove drop shadow
+                text_box.line.fill.background()  # No border
+                text_box.fill.background()  # Transparent fill
+                all_shapes.append(text_box)
+                
+                # Set cell text with formatting
+                text_box.text = text_value
+                
+                # Format text
+                if text_box.text_frame and text_box.text_frame.paragraphs:
+                    # Set minimal margins
+                    text_box.text_frame.margin_left = Inches(0.02)
+                    text_box.text_frame.margin_right = Inches(0.02)
+                    text_box.text_frame.margin_top = Inches(0.01)
+                    text_box.text_frame.margin_bottom = Inches(0.01)
+                    
+                    # Center text vertically
+                    text_box.text_frame.vertical_anchor = MSO_ANCHOR.MIDDLE
+                    
+                    # Disable text wrapping for headers
+                    if row_idx < 3:  # Header rows
+                        text_box.text_frame.word_wrap = False
+                    
+                    paragraph = text_box.text_frame.paragraphs[0]
+                    
+                    if paragraph.runs:
+                        run = paragraph.runs[0]
+                    else:
+                        run = paragraph.add_run()
+                        run.text = text_value
+                    
+                    # Apply font styling
+                    run.font.size = Pt(font_size)
+                    run.font.name = getattr(formatting, 'font_family', 'Arial')
+                    
+                    if cell_data.get("font_bold"):
+                        run.font.bold = True
+                    
+                    # Set font color
+                    if cell_data.get("font_color"):
+                        try:
+                            font_color = cell_data["font_color"]
+                            if isinstance(font_color, str) and len(font_color) >= 6:
+                                rgb_hex = font_color
+                                if len(rgb_hex) == 8:
+                                    rgb_hex = rgb_hex[2:]
+                                r = int(rgb_hex[0:2], 16)
+                                g = int(rgb_hex[2:4], 16)
+                                b = int(rgb_hex[4:6], 16)
+                                run.font.color.rgb = RGBColor(r, g, b)
+                            else:
+                                run.font.color.rgb = RGBColor(0, 0, 0)  # Default black
+                        except:
+                            run.font.color.rgb = RGBColor(0, 0, 0)  # Default black
+                    else:
+                        run.font.color.rgb = RGBColor(0, 0, 0)  # Default black
+                    
+                    # Apply alignment
+                    alignment = cell_data.get("alignment", "left")
+                    if alignment == "center":
+                        paragraph.alignment = PP_ALIGN.CENTER
+                    elif alignment == "right":
+                        paragraph.alignment = PP_ALIGN.RIGHT
+                    else:
+                        paragraph.alignment = PP_ALIGN.LEFT
+                    
+                    # Minimal paragraph spacing
+                    paragraph.space_before = Pt(0)
+                    paragraph.space_after = Pt(0)
+                    paragraph.line_spacing = 1.0
             
-            p = text_frame.paragraphs[0]
-            p.text = str(cell_data.get("value", ""))
-            
-            # Set font properties
-            font = p.font
-            font.name = formatting.font_family
-            font.size = Pt(formatting.font_size)
-            
-            if cell_data.get("font_bold"):
-                font.bold = True
-            
-            # Set alignment
-            alignment_map = {
-                "left": PP_ALIGN.LEFT,
-                "center": PP_ALIGN.CENTER,
-                "right": PP_ALIGN.RIGHT
-            }
-            p.alignment = alignment_map.get(cell_data.get("alignment", "left"), PP_ALIGN.LEFT)
-            
-            # Handle table alignment
-            if formatting.table_alignment == "center":
-                text_frame.vertical_anchor = MSO_ANCHOR.MIDDLE
-            
-            current_left += cell_width
+            current_left_offset += current_col_width
         
-        current_top += row_height
+        current_top_offset += current_row_height
     
+    # Draw gridlines if enabled
+    if getattr(formatting, 'show_gridlines', True):
+        # Calculate cumulative positions for gridlines
+        cumulative_widths = [0]
+        for col_width in col_widths:
+            cumulative_widths.append(cumulative_widths[-1] + col_width)
+        
+        cumulative_heights = [0]
+        for row_height in row_heights:
+            cumulative_heights.append(cumulative_heights[-1] + row_height)
+        
+        # Draw vertical gridlines
+        if getattr(formatting, 'show_vertical_gridlines', True):
+            for i in range(len(cumulative_widths)):
+                line_x = left + Inches(cumulative_widths[i])
+                line = slide.shapes.add_connector(
+                    1,  # Straight line
+                    line_x, top,
+                    line_x, top + Inches(table_height)
+                )
+                line.line.color.rgb = RGBColor(200, 200, 200)
+                line.line.width = Pt(0.5)
+                line.shadow.inherit = False
+                all_shapes.append(line)
+        
+        # Draw horizontal gridlines
+        if getattr(formatting, 'show_horizontal_gridlines', True):
+            for i in range(len(cumulative_heights)):
+                line_y = top + Inches(cumulative_heights[i])
+                line = slide.shapes.add_connector(
+                    1,  # Straight line
+                    left, line_y,
+                    left + Inches(table_width), line_y
+                )
+                line.line.color.rgb = RGBColor(200, 200, 200)
+                line.line.width = Pt(0.5)
+                line.shadow.inherit = False
+                all_shapes.append(line)
+    
+    print(f"Created table with {len(all_shapes)} shapes")
+    return all_shapes[0] if all_shapes else None
+
+def create_slide_with_table(prs, table_data, formatting, title=""):
+    """Create a slide with a table using the main branch's working approach"""
+    print(f"Creating slide with table. Title: {title}")
+    print(f"Table data dimensions: {len(table_data)} rows, {len(table_data[0]) if table_data else 0} columns")
+    
+    slide_layout = prs.slide_layouts[5]  # Blank slide
+    slide = prs.slides.add_slide(slide_layout)
+    
+    num_rows = len(table_data)
+    num_cols = len(table_data[0]) if table_data else 0
+    
+    if num_rows == 0 or num_cols == 0:
+        print(f"No table data to render: {num_rows} rows, {num_cols} columns")
+        return slide
+    
+    # Add title if provided
+    if title:
+        title_shape = slide.shapes.title
+        if title_shape:
+            title_shape.text = title
+            title_shape.top = Inches(0.1)
+            title_shape.height = Inches(0.3)
+            title_shape.left = Inches(0.5)
+            title_shape.width = Inches(9.0)
+            title_shape.shadow.inherit = False  # Remove drop shadow from title
+            
+            if title_shape.text_frame.paragraphs:
+                title_para = title_shape.text_frame.paragraphs[0]
+                if title_para.runs:
+                    title_run = title_para.runs[0]
+                else:
+                    title_run = title_para.add_run()
+                    title_run.text = title
+                title_run.font.size = Pt(14)
+                title_para.alignment = PP_ALIGN.CENTER
+    
+    # Position table
+    margin = 0.5
+    left = Inches(margin)
+    top = Inches(margin + (0.4 if title else 0))
+    
+    print(f"Creating grouped shape table at position ({margin:.1f}\", {margin + (0.4 if title else 0):.1f}\")")
+    
+    # Create the grouped shape table
+    table_shape = create_grouped_shape_table(
+        slide, table_data, formatting, left, top, title
+    )
+    
+    print(f"Table creation completed. Final slide has {len(slide.shapes)} shapes")
     return slide
 
 @app.post("/api/convert-to-pptx")
@@ -438,18 +720,19 @@ async def convert_to_pptx(request: ConversionRequest):
                 row_data = []
                 for col in range(start_col_idx, end_col_idx + 1):
                     cell = ws.cell(row=row, column=col)
+                    bg_color = get_cell_background_color(cell)
                     row_data.append({
                         "value": str(cell.value) if cell.value is not None else "",
                         "font_bold": cell.font.bold if cell.font else False,
                         "font_color": cell.font.color.rgb if cell.font and cell.font.color and cell.font.color.rgb else "000000",
-                        "fill_color": cell.fill.fgColor.rgb if cell.fill and cell.fill.fgColor and cell.fill.fgColor.rgb else "FFFFFF",
+                        "fill_color": bg_color,
                         "alignment": cell.alignment.horizontal if cell.alignment else "left"
                     })
                 table_data.append(row_data)
             
             # Check if we need to split the table
             num_rows = len(table_data)
-            if request.formatting_options.auto_split_large_tables and num_rows > request.formatting_options.max_rows_per_slide:
+            if request.formatting_options.auto_split and num_rows > request.formatting_options.max_rows_per_slide:
                 # Split table across multiple slides
                 headers = table_data[0] if table_range.has_headers else []
                 data_start = 1 if table_range.has_headers else 0
@@ -480,11 +763,12 @@ async def convert_to_pptx(request: ConversionRequest):
         prs.save(output_file.name)
         output_file.close()
         
-        # Clean up Excel file
-        try:
-            os.unlink(file_path)
-        except:
-            pass  # Ignore cleanup errors
+        # Note: Keep Excel file for subsequent downloads
+        # File will be cleaned up by temp directory cleanup
+        # try:
+        #     os.unlink(file_path)
+        # except:
+        #     pass
         
         # Return the file and ensure it gets deleted after download
         return FileResponse(
@@ -495,12 +779,217 @@ async def convert_to_pptx(request: ConversionRequest):
         )
         
     except Exception as e:
-        # Clean up on error
-        try:
-            if 'file_path' in locals() and os.path.exists(file_path):
-                os.unlink(file_path)
-        except:
-            pass
+        # Note: Keep Excel file for subsequent downloads
+        # try:
+        #     if 'file_path' in locals() and os.path.exists(file_path):
+        #         os.unlink(file_path)
+        # except:
+        #     pass
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Worksheet range for multi-worksheet conversion
+class WorksheetRangeRequest(BaseModel):
+    worksheetName: str
+    startCell: str
+    endCell: str
+    includeInDownload: bool
+
+# Multi-worksheet conversion request
+class MultiWorksheetConvertRequest(BaseModel):
+    file_id: str
+    worksheet_ranges: List[WorksheetRangeRequest]
+    options: FormattingOptions
+
+# Simple conversion endpoint that matches frontend expectations
+class SimpleConvertRequest(BaseModel):
+    file_id: str
+    table_id: str
+    options: FormattingOptions
+
+@app.post("/api/convert-to-pptx-simple")
+async def convert_to_pptx_simple(request: SimpleConvertRequest):
+    """Convert ALL sheets to PowerPoint with one slide per sheet"""
+    try:
+        # Load the Excel file
+        file_path = os.path.join(tempfile.gettempdir(), request.file_id)
+        
+        # Check if file exists
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail=f"File not found: {request.file_id}")
+        
+        wb = openpyxl.load_workbook(file_path, data_only=True)
+        
+        # Create presentation
+        prs = Presentation()
+        
+        # Set slide size based on orientation
+        if request.options.slide_orientation == "vertical":
+            prs.slide_width = Inches(7.5)
+            prs.slide_height = Inches(10)
+        else:
+            prs.slide_width = Inches(10)
+            prs.slide_height = Inches(7.5)
+        
+        # Process each sheet in the workbook
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            
+            # Skip empty sheets
+            if ws.max_row <= 1 and ws.max_column <= 1:
+                continue
+                
+            # Use the preview settings if this sheet was customized
+            sheet_key = f"{request.file_id}_{sheet_name}"
+            
+            # Determine the data range to use
+            if hasattr(request.options, 'preview_rows') and hasattr(request.options, 'preview_columns'):
+                end_row = min(ws.max_row, request.options.preview_rows or 50)
+                end_col = min(ws.max_column, request.options.preview_columns or 20)
+            else:
+                end_row = min(ws.max_row, 50)  # Default limit
+                end_col = min(ws.max_column, 20)  # Default limit
+            
+            # Extract data from the sheet
+            table_data = []
+            for row in range(1, end_row + 1):
+                row_data = []
+                for col in range(1, end_col + 1):
+                    cell = ws.cell(row=row, column=col)
+                    bg_color = get_cell_background_color(cell)
+                    row_data.append({
+                        "value": str(cell.value) if cell.value is not None else "",
+                        "font_bold": cell.font.bold if cell.font else False,
+                        "font_color": cell.font.color.rgb if cell.font and cell.font.color and cell.font.color.rgb else "000000",
+                        "fill_color": bg_color,
+                        "alignment": cell.alignment.horizontal if cell.alignment else "left"
+                    })
+                table_data.append(row_data)
+            
+            # Create slide for this sheet
+            if table_data:
+                create_slide_with_table(prs, table_data, request.options, f"Sheet: {sheet_name}")
+        
+        # Save presentation
+        output_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pptx')
+        prs.save(output_file.name)
+        output_file.close()
+        
+        # Note: Keep Excel file for subsequent downloads
+        # File will be cleaned up by temp directory cleanup
+        # try:
+        #     os.unlink(file_path)
+        # except:
+        #     pass
+        
+        # Return the file
+        return FileResponse(
+            output_file.name,
+            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            filename=f"converted_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pptx",
+            background=None
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/convert-multi-worksheet")
+async def convert_multi_worksheet(request: MultiWorksheetConvertRequest):
+    """Convert multiple worksheet ranges to PowerPoint"""
+    try:
+        # Load the Excel file
+        file_path = os.path.join(tempfile.gettempdir(), request.file_id)
+        
+        # Check if file exists
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail=f"File not found: {request.file_id}")
+        
+        wb = openpyxl.load_workbook(file_path, data_only=True)
+        
+        # Create presentation
+        prs = Presentation()
+        
+        # Set slide size based on orientation
+        if request.options.slide_orientation == "vertical":
+            prs.slide_width = Inches(7.5)
+            prs.slide_height = Inches(10)
+        else:
+            prs.slide_width = Inches(10)
+            prs.slide_height = Inches(7.5)
+        
+        # Process each included worksheet range
+        for ws_range in request.worksheet_ranges:
+            if not ws_range.includeInDownload:
+                continue
+                
+            try:
+                ws = wb[ws_range.worksheetName]
+            except KeyError:
+                continue  # Skip if worksheet doesn't exist
+            
+            # Parse the cell range
+            start_col, start_row = coordinate_from_string(ws_range.startCell)
+            end_col, end_row = coordinate_from_string(ws_range.endCell)
+            
+            start_col_idx = column_index_from_string(start_col)
+            end_col_idx = column_index_from_string(end_col)
+            
+            # Extract data from the specified range
+            table_data = []
+            print(f"Processing range {ws_range.startCell}:{ws_range.endCell} for worksheet {ws_range.worksheetName}")
+            print(f"Parsed coordinates: start=({start_col},{start_row}) end=({end_col},{end_row})")
+            print(f"Column indices: start={start_col_idx} end={end_col_idx}")
+            
+            for row in range(start_row, min(end_row + 1, ws.max_row + 1)):
+                row_data = []
+                for col in range(start_col_idx, min(end_col_idx + 1, ws.max_column + 1)):
+                    cell = ws.cell(row=row, column=col)
+                    bg_color = get_cell_background_color(cell)
+                    row_data.append({
+                        "value": str(cell.value) if cell.value is not None else "",
+                        "font_bold": cell.font.bold if cell.font else False,
+                        "font_color": cell.font.color.rgb if cell.font and cell.font.color and cell.font.color.rgb else "000000",
+                        "fill_color": bg_color,
+                        "alignment": cell.alignment.horizontal if cell.alignment else "left"
+                    })
+                table_data.append(row_data)
+            
+            print(f"Extracted {len(table_data)} rows with {len(table_data[0]) if table_data else 0} columns")
+            for i, row in enumerate(table_data[:3]):  # Print first 3 rows for debugging
+                print(f"Row {i}: {[cell['value'] for cell in row[:5]]}")
+            
+            # Create slide for this range
+            if table_data:
+                range_title = f"{ws_range.worksheetName} ({ws_range.startCell}:{ws_range.endCell})"
+                print(f"Creating slide with title: {range_title}")
+                create_slide_with_table(prs, table_data, request.options, range_title)
+            else:
+                print(f"No data found for range {ws_range.startCell}:{ws_range.endCell}")
+        
+        # Save presentation
+        output_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pptx')
+        prs.save(output_file.name)
+        output_file.close()
+        
+        # Note: Keep Excel file for subsequent downloads
+        # File will be cleaned up by temp directory cleanup
+        # try:
+        #     os.unlink(file_path)
+        # except:
+        #     pass
+        
+        # Return the file
+        return FileResponse(
+            output_file.name,
+            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            filename=f"converted_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pptx",
+            background=None
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/")
