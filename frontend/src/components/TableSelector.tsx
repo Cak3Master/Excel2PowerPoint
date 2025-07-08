@@ -18,11 +18,11 @@ export const TableSelector: React.FC<TableSelectorProps> = ({
     <div className="bg-white rounded-lg shadow p-6">
       <h3 className="text-lg font-semibold mb-4">Select a Table or Worksheet</h3>
       
-      {worksheets.length === 0 && tables.length === 0 ? (
+      {(!worksheets || worksheets.length === 0) && (!tables || tables.length === 0) ? (
         <p className="text-gray-500">No data found in the Excel file.</p>
       ) : (
         <div className="space-y-2">
-          {tables.map((table) => (
+          {tables && tables.map((table) => (
             <div
               key={table.id}
               onClick={() => onTableSelect(table.id)}
@@ -42,7 +42,7 @@ export const TableSelector: React.FC<TableSelectorProps> = ({
             </div>
           ))}
           
-          {worksheets.filter(ws => ws.has_data).map((worksheet) => {
+          {worksheets && worksheets.filter(ws => ws.has_data).map((worksheet) => {
             const worksheetTableId = `worksheet_${worksheet.name}`;
             return (
               <div

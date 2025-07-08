@@ -45,7 +45,7 @@ class FormattingOptions(BaseModel):
     column_spacing: float = 1.0
     slide_orientation: str = "horizontal"  # horizontal, vertical
     repeat_headers: bool = True
-    auto_split_large_tables: bool = True
+    auto_split: bool = True
     max_rows_per_slide: int = 20
 
 class ConversionRequest(BaseModel):
@@ -155,9 +155,38 @@ async def analyze_excel(file: UploadFile = File(...)):
         with open(file_path, 'wb') as f:
             f.write(content)
         
+        # Extract tables from all sheets for the frontend
+        all_tables = []
+        worksheets = []
+        
+        for sheet_info in sheets_info:
+            # Convert sheet to worksheet format
+            worksheet = {
+                "name": sheet_info["name"],
+                "rows": sheet_info["rows"], 
+                "columns": sheet_info["columns"],
+                "has_data": len(sheet_info["data_preview"]) > 0
+            }
+            worksheets.append(worksheet)
+            
+            # Add tables with unique IDs
+            for i, table in enumerate(sheet_info["tables"]):
+                table_obj = {
+                    "id": f"{sheet_info['name']}_table_{i}",
+                    "name": f"Table {i+1}",
+                    "worksheet": sheet_info["name"],
+                    "range": f"{table['start_cell']}:{table['end_cell']}",
+                    "rows": table["rows"],
+                    "columns": table["columns"],
+                    "display_name": f"{sheet_info['name']} - Table {i+1} ({table['start_cell']}:{table['end_cell']})"
+                }
+                all_tables.append(table_obj)
+        
         return {
+            "message": "Excel file analyzed successfully",
             "file_id": file_id,
-            "sheets": sheets_info
+            "worksheets": worksheets,
+            "tables": all_tables
         }
         
     except Exception as e:
@@ -165,8 +194,8 @@ async def analyze_excel(file: UploadFile = File(...)):
 
 class PreviewRequest(BaseModel):
     file_id: str
-    table_range: TableRange
-    formatting: FormattingOptions
+    table_id: str
+    options: FormattingOptions
 
 @app.post("/api/preview-slide")
 async def preview_slide(request: PreviewRequest):
@@ -178,46 +207,62 @@ async def preview_slide(request: PreviewRequest):
         # Check if file exists
         if not os.path.exists(file_path):
             raise HTTPException(status_code=404, detail=f"File not found: {request.file_id}")
+        
         wb = openpyxl.load_workbook(file_path, data_only=True)
-        ws = wb[request.table_range.sheet_name]
         
-        # Extract data from the specified range
-        start_col, start_row = coordinate_from_string(request.table_range.start_cell)
-        end_col, end_row = coordinate_from_string(request.table_range.end_cell)
+        # Parse table_id to get sheet name and table info
+        # Format: "SheetName_table_0" or "worksheet_SheetName"
+        if request.table_id.startswith("worksheet_"):
+            # It's a full worksheet
+            sheet_name = request.table_id.replace("worksheet_", "")
+            ws = wb[sheet_name]
+            # Use the entire data area
+            start_row, start_col = 1, 1
+            end_row, end_col = ws.max_row, ws.max_column
+        else:
+            # Parse table ID: "SheetName_table_N"
+            parts = request.table_id.split("_table_")
+            if len(parts) != 2:
+                raise HTTPException(status_code=400, detail=f"Invalid table_id format: {request.table_id}")
+            
+            sheet_name = parts[0]
+            table_index = int(parts[1])
+            
+            # Re-analyze the sheet to find the table
+            ws = wb[sheet_name]
+            tables = detect_tables_in_sheet(ws)
+            
+            if table_index >= len(tables):
+                raise HTTPException(status_code=404, detail=f"Table {table_index} not found in sheet {sheet_name}")
+            
+            table = tables[table_index]
+            start_col, start_row = coordinate_from_string(table["start_cell"])
+            end_col, end_row = coordinate_from_string(table["end_cell"])
+            start_col = column_index_from_string(start_col)
+            end_col = column_index_from_string(end_col)
         
-        start_col_idx = column_index_from_string(start_col)
-        end_col_idx = column_index_from_string(end_col)
-        
-        # Get table data
+        # Get table data as simple strings
         table_data = []
-        for row in range(start_row, end_row + 1):
+        for row in range(start_row, min(end_row + 1, start_row + 50)):  # Limit to 50 rows for preview
             row_data = []
-            for col in range(start_col_idx, end_col_idx + 1):
+            for col in range(start_col, min(end_col + 1, start_col + 20)):  # Limit to 20 columns for preview
                 cell = ws.cell(row=row, column=col)
-                row_data.append({
-                    "value": str(cell.value) if cell.value is not None else "",
-                    "font_bold": cell.font.bold if cell.font else False,
-                    "font_color": cell.font.color.rgb if cell.font and cell.font.color and cell.font.color.rgb else "000000",
-                    "fill_color": cell.fill.fgColor.rgb if cell.fill and cell.fill.fgColor and cell.fill.fgColor.rgb else "FFFFFF",
-                    "alignment": cell.alignment.horizontal if cell.alignment else "left"
-                })
+                value = str(cell.value) if cell.value is not None else ""
+                row_data.append(value)
             table_data.append(row_data)
         
         # Calculate dimensions
-        num_cols = end_col_idx - start_col_idx + 1
-        num_rows = end_row - start_row + 1
+        num_rows = len(table_data)
+        num_cols = len(table_data[0]) if table_data else 0
         
-        # Estimate if table needs to be split
-        needs_split = num_rows > request.formatting.max_rows_per_slide and request.formatting.auto_split_large_tables
+        # Check if splitting is needed
+        needs_split = num_rows > request.options.max_rows_per_slide and request.options.auto_split
+        estimated_slides = (num_rows // request.options.max_rows_per_slide) + 1 if needs_split else 1
         
         return {
-            "table_data": table_data,
-            "dimensions": {
-                "rows": num_rows,
-                "columns": num_cols
-            },
-            "needs_split": needs_split,
-            "estimated_slides": (num_rows // request.formatting.max_rows_per_slide) + 1 if needs_split else 1
+            "slide_content": table_data,
+            "slide_count": estimated_slides,
+            "message": f"Preview generated for {num_rows} rows x {num_cols} columns"
         }
         
     except Exception as e:

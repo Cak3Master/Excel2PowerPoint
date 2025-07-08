@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(npm start)",
+      "Bash(ls:*)",
+      "Bash(npm install)",
+      "Bash(source:*)",
+      "Bash(pip install:*)",
+      "Bash(pip3 install:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(curl:*)",
+      "Bash(docker-compose restart:*)",
+      "Bash(docker-compose logs:*)",
+      "Bash(docker-compose:*)",
+      "Bash(echo)"
+    ],
+    "deny": []
+  }
+}

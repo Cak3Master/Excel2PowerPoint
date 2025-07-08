@@ -31,6 +31,7 @@ export interface ConversionOptions {
   slide_orientation: 'horizontal' | 'vertical';
   repeat_headers: boolean;
   auto_split: boolean;
+  max_rows_per_slide: number;
 }
 
 export interface PreviewRequest {
@@ -40,7 +41,7 @@ export interface PreviewRequest {
 }
 
 export interface PreviewResponse {
-  slide_content: string[][];
+  slide_content: string[][] | string[][][];
   slide_count: number;
   message: string;
 }

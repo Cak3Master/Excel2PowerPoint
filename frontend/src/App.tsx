@@ -19,6 +19,7 @@ const defaultOptions: ConversionOptions = {
   slide_orientation: 'horizontal',
   repeat_headers: true,
   auto_split: true,
+  max_rows_per_slide: 20,
 };
 
 function App() {
@@ -40,12 +41,22 @@ function App() {
     setPreview(null);
 
     try {
+      console.log('Starting file analysis for:', selectedFile.name);
       const result = await analyzeExcel(selectedFile);
+      console.log('Analysis result:', result);
+      
+      // Validate the result structure
+      if (!result || !result.file_id) {
+        throw new Error('Invalid response from server');
+      }
+      
       setAnalysisResult(result);
+      console.log('Analysis result set successfully');
     } catch (err) {
-      setError('Failed to analyze Excel file. Please try again.');
       console.error('Analysis error:', err);
+      setError(`Failed to analyze Excel file: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
+      console.log('Setting loading to false');
       setLoading(false);
     }
   }, []);
@@ -123,10 +134,11 @@ function App() {
     // If it's a flat array, we need to handle it differently
     if (Array.isArray(preview.slide_content[0]) && Array.isArray(preview.slide_content[0][0])) {
       // It's already in the format [slide][row][cell]
-      return preview.slide_content[currentSlide] || [];
+      const multiSlideContent = preview.slide_content as string[][][];
+      return multiSlideContent[currentSlide] || [];
     } else {
       // It's in the format [row][cell], so we show all content
-      return preview.slide_content;
+      return preview.slide_content as string[][];
     }
   };
 
@@ -170,12 +182,18 @@ function App() {
 
           {/* Table Selection and Options */}
           {analysisResult && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-1">
-                <TableSelector
-                  worksheets={analysisResult.worksheets}
-                  tables={analysisResult.tables}
-                  selectedTableId={selectedTableId}
+            <>
+              {console.log('Rendering analysis result:', {
+                worksheets: analysisResult.worksheets?.length,
+                tables: analysisResult.tables?.length,
+                selectedTableId
+              })}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-1">
+                  <TableSelector
+                    worksheets={analysisResult.worksheets || []}
+                    tables={analysisResult.tables || []}
+                    selectedTableId={selectedTableId}
                   onTableSelect={handleTableSelect}
                 />
               </div>
@@ -202,6 +220,7 @@ function App() {
                 )}
               </div>
             </div>
+            </>
           )}
 
           {/* Preview */}
