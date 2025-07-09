@@ -94,40 +94,47 @@ export const SlidePreview: React.FC<SlidePreviewProps> = ({
     debouncedSave(newState);
   }, [debouncedSave]);
 
-  // Calculate optimal column width based on content - EXTREMELY generous to prevent ALL wrapping
+  // Calculate optimal column width based on content with slide boundary constraints
   const calculateColumnWidth = useCallback((columnIndex: number): number => {
-    if (!slideContent || slideContent.length === 0) return 400;
+    if (!slideContent || slideContent.length === 0) return 150;
     
-    let maxWidth = 400; // EXTREMELY generous minimum width
+    const numColumns = slideContent[0]?.length || 1;
     
-    // Check all cells in this column
+    // Calculate available width per column based on slide constraints
+    // Assume standard slide width is ~1280px with margins
+    const maxSlideWidth = 1200; // Leave some margin
+    const maxWidthPerColumn = Math.max(120, Math.floor(maxSlideWidth / numColumns));
+    
+    let optimalWidth = 100; // Start with reasonable minimum
+    
+    // Check all cells in this column to find the longest content
     for (let rowIndex = 0; rowIndex < slideContent.length; rowIndex++) {
       const cell = slideContent[rowIndex][columnIndex];
       if (cell && cell.value) {
         const text = String(cell.value);
-        // EXTREMELY generous width estimation to prevent ANY wrapping
-        // Each character is roughly 25-30 pixels wide to be absolutely safe
-        let estimatedWidth = text.length * 25; // Increased from 20 to 25
+        // More reasonable character width estimation (8-10px per character)
+        let estimatedWidth = text.length * 9;
         
-        // Add massive padding for bold text
+        // Add moderate padding for bold text
         if (cell.font_bold) {
-          estimatedWidth *= 1.8; // Increased from 1.5 to 1.8
+          estimatedWidth *= 1.3;
         }
         
-        // Header rows get MASSIVE extra space to prevent wrapping
+        // Header rows get some extra space but not excessive
         if (rowIndex < sheetState.headerRows) {
-          estimatedWidth *= 2.5; // Increased from 2.0 to 2.5
+          estimatedWidth *= 1.4;
         }
         
-        // Add MASSIVE base padding for cell content
-        estimatedWidth += 150; // Increased from 100px to 150px padding
+        // Add reasonable base padding
+        estimatedWidth += 40;
         
-        maxWidth = Math.max(maxWidth, estimatedWidth);
+        optimalWidth = Math.max(optimalWidth, estimatedWidth);
       }
     }
     
-    // No maximum limit - let columns be as wide as needed
-    return Math.min(maxWidth, 2000); // Increased from 1200 to 2000
+    // Ensure column width is within reasonable bounds
+    // Minimum 100px, maximum based on available slide space
+    return Math.min(Math.max(optimalWidth, 100), maxWidthPerColumn);
   }, [slideContent, sheetState.headerRows]);
 
   // Initialize column widths and row heights when content changes
@@ -144,7 +151,7 @@ export const SlidePreview: React.FC<SlidePreviewProps> = ({
         
         if (needsColumnUpdate) {
           // Calculate optimal widths for each column
-          const optimalWidths = new Array(numCols).fill(400).map((_, index) => 
+          const optimalWidths = new Array(numCols).fill(150).map((_, index) => 
             calculateColumnWidth(index)
           );
           updates.columnWidths = optimalWidths;
@@ -235,7 +242,7 @@ export const SlidePreview: React.FC<SlidePreviewProps> = ({
     const currentState = currentStateRef.current;
     const startPos = type === 'column' ? e.clientX : e.clientY;
     const startSize = type === 'column' 
-      ? (currentState.columnWidths[index] || 400)
+      ? (currentState.columnWidths[index] || 150)
       : (currentState.rowHeights[index] || 32);
     
     console.log(`🎯 DRAG START: type=${type}, index=${index}, startPos=${startPos}, startSize=${startSize}`);
@@ -459,7 +466,7 @@ export const SlidePreview: React.FC<SlidePreviewProps> = ({
                         <th 
                           key={cellIndex}
                           className="bg-gray-200 border border-gray-300 text-xs font-bold text-center sticky top-0 z-10"
-                          style={{ width: `${sheetState.columnWidths[cellIndex] || 400}px`, height: '32px' }}
+                          style={{ width: `${sheetState.columnWidths[cellIndex] || 150}px`, height: '32px' }}
                         >
                           {getColumnLetter(cellIndex)}
                         </th>
@@ -538,7 +545,7 @@ export const SlidePreview: React.FC<SlidePreviewProps> = ({
                                 inRange ? 'opacity-100' : 'opacity-30'
                               } ${isHeaderRow ? 'ring-1 ring-blue-200' : ''} ${gridlineClass}`}
                               style={{
-                                width: `${sheetState.columnWidths[cellIndex] || 400}px`,
+                                width: `${sheetState.columnWidths[cellIndex] || 150}px`,
                                 backgroundColor: inRange ? bgColor : '#f9f9f9',
                                 fontWeight: cell.font_bold ? 'bold' : 'normal',
                                 textAlign: textAlign as any,

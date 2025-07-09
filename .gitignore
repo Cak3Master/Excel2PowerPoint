@@ -83,6 +83,62 @@ ngrok
 # Docker
 .dockerignore
 
+# Development files
+create_test_file.py
+debug_cells.py
+test_*.py
+fix_and_run.py
+app_fixed.py
+simple_backend.py
+build.sh
+start-dev.sh
+run_app.py
+test_conversion.py
+test_debug.py
+simple-app.html
+frontend_new.log
+test_functionality.html
+test_verification.js
+start.sh
+
+# Configuration files (local)
+.claude/settings.local.json
+.env.example
+.env.development
+
+# Documentation drafts
+DOCKER_README.md
+API_ENDPOINTS.md
+ARCHITECTURE_DESIGN.md
+FRONTEND_COMPONENTS.md
+MIGRATION_STRATEGY.md
+PROJECT_STRUCTURE.md
+SCHEMAS.md
+SETUP_GUIDE.md
+USER_GUIDE.md
+
+# Development Docker files
+*.dev
+Dockerfile.dev
+docker-compose.dev.yml
+
+# Development backend structure
+backend/agents/
+backend/api/
+backend/core/
+backend/database/
+
+# Development frontend structure
+src/react-app-env.d.ts
+src/stores/
+src/utils/
+src/components/common/
+src/components/export/
+src/components/layout/
+src/components/presets/
+src/components/upload/
+src/components/visualization/
+
 # Database
 *.db
 *.sqlite

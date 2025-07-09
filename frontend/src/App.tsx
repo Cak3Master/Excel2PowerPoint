@@ -1,14 +1,32 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import { useAppStore } from './stores/appStore';
+import { 
+  HomeIcon,
+  ChartBarIcon,
+  TableCellsIcon,
+  RocketLaunchIcon,
+  ArrowDownTrayIcon,
+  CloudArrowUpIcon,
+  Bars3Icon,
+  XMarkIcon
+} from '@heroicons/react/24/outline';
 import { FileUpload } from './components/FileUpload';
 import { WorksheetSelector, WorksheetRange } from './components/WorksheetSelector';
 import { FormatOptions } from './components/FormatOptions';
 import { SlidePreview } from './components/SlidePreview';
+import { MultiSourceUpload } from './components/upload/MultiSourceUpload';
+import { VisualizationPage } from './components/visualization/VisualizationPage';
+import { PivotPageEnhanced } from './components/pivot/PivotPageEnhanced';
+import { PresetPage } from './components/presets/PresetPage';
+import { ExportPage } from './components/export/ExportPage';
+import { NotificationDisplay } from './components/common/NotificationDisplay';
 import { 
   AnalysisResult, 
   ConversionOptions, 
   PreviewResponse,
   CellData,
-  MultiWorksheetConvertRequest
+  MultiWorksheetConvertRequest,
+  DataSource
 } from './types';
 import { analyzeExcel, previewSlide, convertToPptx, convertMultiWorksheetToPptx } from './services/api';
 import { 
@@ -18,7 +36,10 @@ import {
   loadSheetState
 } from './utils/localStorage';
 
+type NavigationTab = 'legacy' | 'upload' | 'visualization' | 'pivot' | 'presets' | 'export';
+
 function App() {
+  // Legacy state for backward compatibility
   const [file, setFile] = useState<File | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [selectedWorksheet, setSelectedWorksheet] = useState<string | null>(null);
@@ -29,6 +50,31 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentSheetKey, setCurrentSheetKey] = useState<string | null>(null);
+  
+  // New navigation state
+  const [activeTab, setActiveTab] = useState<NavigationTab>('upload');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  
+  // Use global store for data sources
+  const { dataSources, addDataSource, removeDataSource } = useAppStore();
+  
+  // Multi-source upload handlers
+  const handleDataSourceAdded = useCallback((dataSource: DataSource) => {
+    addDataSource(dataSource);
+  }, [addDataSource]);
+  
+  const handleDataSourceRemoved = useCallback((sourceId: string) => {
+    removeDataSource(sourceId);
+  }, [removeDataSource]);
+
+  const navigationTabs = [
+    { id: 'upload' as NavigationTab, name: 'Data Upload', icon: CloudArrowUpIcon },
+    { id: 'visualization' as NavigationTab, name: 'Visualization', icon: ChartBarIcon },
+    { id: 'pivot' as NavigationTab, name: 'Pivot Tables', icon: TableCellsIcon },
+    { id: 'presets' as NavigationTab, name: 'Presets', icon: RocketLaunchIcon },
+    { id: 'export' as NavigationTab, name: 'Export', icon: ArrowDownTrayIcon },
+    { id: 'legacy' as NavigationTab, name: 'Legacy Mode', icon: HomeIcon }
+  ];
 
   const handleFileSelect = useCallback(async (selectedFile: File) => {
     setFile(selectedFile);
@@ -179,109 +225,212 @@ function App() {
     }
   };
 
-  return (
-    <div className="min-h-screen" style={{ backgroundColor: '#f7f8fa' }}>
-      <header className="shadow-lg" style={{ backgroundColor: '#006FCF' }}>
-        <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
-          <div className="flex items-center space-x-4">
-            <div className="flex-shrink-0">
-              <div className="text-white font-bold text-lg">AmEx</div>
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'upload':
+        return (
+          <MultiSourceUpload 
+            dataSources={dataSources}
+            onDataSourceAdded={handleDataSourceAdded}
+            onDataSourceRemoved={handleDataSourceRemoved}
+          />
+        );
+      case 'visualization':
+        return <VisualizationPage />;
+      case 'pivot':
+        return <PivotPageEnhanced />;
+      case 'presets':
+        return <PresetPage />;
+      case 'export':
+        return <ExportPage />;
+      case 'legacy':
+        return (
+          <div className="space-y-6">
+            {/* Legacy File Upload */}
+            <div className="bg-white rounded-lg shadow-lg p-6" style={{ borderTop: '4px solid #006FCF' }}>
+              <h2 className="text-xl font-semibold mb-4" style={{ color: '#006FCF' }}>Step 1: Upload Excel File</h2>
+              <FileUpload onFileSelect={handleFileSelect} disabled={loading} />
+              {file && (
+                <p className="mt-2 text-sm text-gray-600">
+                  Selected file: {file.name}
+                </p>
+              )}
             </div>
-            <h1 className="text-3xl font-bold text-white">
-              Excel to PowerPoint Converter
-            </h1>
-          </div>
-        </div>
-      </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-md">
-            <p className="text-red-600">{error}</p>
-          </div>
-        )}
+            {/* Legacy Table Selection and Options */}
+            {analysisResult && (
+              <>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="lg:col-span-1">
+                    <WorksheetSelector
+                      worksheets={analysisResult.worksheets || []}
+                      selectedWorksheet={selectedWorksheet}
+                      onWorksheetSelect={handleWorksheetSelect}
+                      worksheetRanges={worksheetRanges}
+                      onRangeUpdate={handleRangeUpdate}
+                    />
+                  </div>
+                
+                  <div className="lg:col-span-1">
+                    <FormatOptions
+                      options={options}
+                      onChange={handleOptionsChange}
+                    />
+                  </div>
+                
+                  <div className="lg:col-span-1">
+                    <div className="bg-white rounded-lg shadow-lg p-6" style={{ borderTop: '4px solid #006FCF' }}>
+                      <h3 className="text-lg font-semibold mb-4" style={{ color: '#006FCF' }}>Actions</h3>
+                      <button
+                        onClick={handleDownload}
+                        disabled={loading || worksheetRanges.filter(r => r.includeInDownload).length === 0}
+                        className="w-full px-4 py-2 text-white rounded-md hover:opacity-90 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all transform hover:scale-105"
+                        style={{ backgroundColor: '#006FCF' }}
+                      >
+                        Download PowerPoint
+                      </button>
+                      <p className="text-xs text-gray-500 mt-2">
+                        {worksheetRanges.filter(r => r.includeInDownload).length} worksheet(s) selected
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
 
-        {loading && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-              <p className="mt-4 text-gray-600">Processing...</p>
-            </div>
-          </div>
-        )}
-
-        <div className="space-y-6">
-          {/* File Upload */}
-          <div className="bg-white rounded-lg shadow-lg p-6" style={{ borderTop: '4px solid #006FCF' }}>
-            <h2 className="text-xl font-semibold mb-4" style={{ color: '#006FCF' }}>Step 1: Upload Excel File</h2>
-            <FileUpload onFileSelect={handleFileSelect} disabled={loading} />
-            {file && (
-              <p className="mt-2 text-sm text-gray-600">
-                Selected file: {file.name}
-              </p>
+            {/* Legacy Preview */}
+            {preview && (
+              <SlidePreview
+                slideContent={getCurrentSlideContent()}
+                slideCount={preview.slide_count}
+                currentSlide={currentSlide}
+                onSlideChange={setCurrentSlide}
+                sheetKey={currentSheetKey}
+                onPreviewChange={loadPreview}
+                customRange={selectedWorksheet ? worksheetRanges.find(r => r.worksheetName === selectedWorksheet) : null}
+              />
             )}
           </div>
+        );
+      default:
+        return (
+          <MultiSourceUpload 
+            dataSources={dataSources}
+            onDataSourceAdded={handleDataSourceAdded}
+            onDataSourceRemoved={handleDataSourceRemoved}
+          />
+        );
+    }
+  };
 
-          {/* Table Selection and Options */}
-          {analysisResult && (
-            <>
-              {console.log('Rendering analysis result:', {
-                worksheets: analysisResult.worksheets?.length,
-                selectedWorksheet,
-                worksheetRanges: worksheetRanges.length
-              })}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-1">
-                  <WorksheetSelector
-                    worksheets={analysisResult.worksheets || []}
-                    selectedWorksheet={selectedWorksheet}
-                    onWorksheetSelect={handleWorksheetSelect}
-                    worksheetRanges={worksheetRanges}
-                    onRangeUpdate={handleRangeUpdate}
-                  />
-                </div>
-              
-              <div className="lg:col-span-1">
-                <FormatOptions
-                  options={options}
-                  onChange={handleOptionsChange}
-                />
-              </div>
-              
-              <div className="lg:col-span-1">
-                <div className="bg-white rounded-lg shadow-lg p-6" style={{ borderTop: '4px solid #006FCF' }}>
-                  <h3 className="text-lg font-semibold mb-4" style={{ color: '#006FCF' }}>Actions</h3>
-                  <button
-                    onClick={handleDownload}
-                    disabled={loading || worksheetRanges.filter(r => r.includeInDownload).length === 0}
-                    className="w-full px-4 py-2 text-white rounded-md hover:opacity-90 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all transform hover:scale-105"
-                    style={{ backgroundColor: '#006FCF' }}
-                  >
-                    Download PowerPoint
-                  </button>
-                  <p className="text-xs text-gray-500 mt-2">
-                    {worksheetRanges.filter(r => r.includeInDownload).length} worksheet(s) selected
-                  </p>
-                </div>
-              </div>
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Mobile sidebar */}
+      <div className={`fixed inset-0 flex z-40 md:hidden ${sidebarOpen ? '' : 'hidden'}`}>
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={() => setSidebarOpen(false)} />
+        <div className="relative flex-1 flex flex-col max-w-xs w-full bg-white">
+          <div className="absolute top-0 right-0 -mr-12 pt-2">
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="ml-1 flex items-center justify-center h-10 w-10 rounded-full focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
+            >
+              <XMarkIcon className="h-6 w-6 text-white" />
+            </button>
+          </div>
+          <div className="flex-1 h-0 pt-5 pb-4 overflow-y-auto">
+            <div className="flex-shrink-0 flex items-center px-4">
+              <div className="text-blue-600 font-bold text-lg">AmEx Analytics</div>
             </div>
-            </>
-          )}
-
-          {/* Preview */}
-          {preview && (
-            <SlidePreview
-              slideContent={getCurrentSlideContent()}
-              slideCount={preview.slide_count}
-              currentSlide={currentSlide}
-              onSlideChange={setCurrentSlide}
-              sheetKey={currentSheetKey}
-              onPreviewChange={loadPreview}
-              customRange={selectedWorksheet ? worksheetRanges.find(r => r.worksheetName === selectedWorksheet) : null}
-            />
-          )}
+            <nav className="mt-5 px-2 space-y-1">
+              {navigationTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    setSidebarOpen(false);
+                  }}
+                  className={`group flex items-center px-2 py-2 text-base font-medium rounded-md w-full text-left ${
+                    activeTab === tab.id
+                      ? 'bg-blue-100 text-blue-900'
+                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <tab.icon className="mr-4 h-6 w-6" />
+                  {tab.name}
+                </button>
+              ))}
+            </nav>
+          </div>
         </div>
-      </main>
+      </div>
+
+      {/* Desktop sidebar */}
+      <div className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0">
+        <div className="flex-1 flex flex-col min-h-0 bg-white border-r border-gray-200">
+          <div className="flex-1 flex flex-col pt-5 pb-4 overflow-y-auto">
+            <div className="flex items-center flex-shrink-0 px-4">
+              <div className="text-blue-600 font-bold text-xl">AmEx Analytics</div>
+            </div>
+            <nav className="mt-5 flex-1 px-2 space-y-1">
+              {navigationTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md w-full text-left ${
+                    activeTab === tab.id
+                      ? 'bg-blue-100 text-blue-900'
+                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <tab.icon className="mr-3 h-5 w-5" />
+                  {tab.name}
+                </button>
+              ))}
+            </nav>
+          </div>
+        </div>
+      </div>
+
+      {/* Main content */}
+      <div className="md:pl-64 flex flex-col flex-1">
+        <div className="sticky top-0 z-10 md:hidden pl-1 pt-1 sm:pl-3 sm:pt-3 bg-gray-200">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="-ml-0.5 -mt-0.5 h-12 w-12 inline-flex items-center justify-center rounded-md text-gray-500 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+          >
+            <Bars3Icon className="h-6 w-6" />
+          </button>
+        </div>
+
+        <main className="flex-1">
+          <div className="py-6">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
+              {/* Error Display */}
+              {error && (
+                <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-md">
+                  <p className="text-red-600">{error}</p>
+                </div>
+              )}
+
+              {/* Loading Overlay */}
+              {loading && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                  <div className="bg-white rounded-lg p-6">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+                    <p className="mt-4 text-gray-600">Processing...</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Content */}
+              {renderContent()}
+            </div>
+          </div>
+        </main>
+      </div>
+
+      {/* Notification Display */}
+      <NotificationDisplay />
     </div>
   );
 }
