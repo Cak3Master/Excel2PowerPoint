@@ -1,46 +1,61 @@
-# Excel to PowerPoint Converter
+# Excel to PowerPoint Converter with Advanced Analytics
 
-A professional web application that converts Excel workbooks into perfectly formatted PowerPoint presentations. The application features a modern React frontend with a powerful FastAPI backend, providing an intuitive interface for uploading Excel files and converting them to high-quality PowerPoint slides.
+A comprehensive web application that converts Excel workbooks into perfectly formatted PowerPoint presentations, featuring advanced pivot table creation, label-based data management, and multi-source data integration. The application combines a modern React TypeScript frontend with a powerful Flask backend to provide enterprise-grade data processing capabilities.
 
 ## 🚀 Features
 
-### Advanced Excel Processing
-- **Multi-sheet support** - Convert multiple worksheets into separate slides
-- **Intelligent table detection** - Automatically identifies data regions and tables
-- **Data range selection** - Choose specific ranges from each worksheet
-- **Format preservation** - Maintains fonts, colors, alignment, and styling
-- **Merged cell support** - Handles complex merged cell layouts
-- **Smart data trimming** - Removes empty rows and columns automatically
+### Advanced Data Management
+- **Multi-source data upload** - Upload and combine multiple Excel files
+- **Label-based organization** - Create reusable labels for recurring data structures
+- **Data relationship detection** - Automatically identify connections between datasets
+- **Column validation** - Validate data against expected column structures
+- **Usage tracking** - Monitor how frequently data labels are used
+- **Search and filtering** - Find labels and data sources quickly
+
+### Powerful Pivot Table Creation
+- **Multiple pivot tables** - Create multiple pivot tables from single or combined data sources
+- **Intuitive field configuration** - Drag-and-drop interface for rows, columns, and values
+- **Advanced aggregations** - Sum, count, average, min, max calculations
+- **Preset management** - Save and reuse pivot table configurations
+- **Real-time search** - Search through available fields and data sources
+- **Excel export** - Generate comprehensive Excel files with formatted pivot tables
 
 ### Professional PowerPoint Output
 - **Shape-based tables** - Custom implementation for precise control over table formatting
 - **Adaptive column sizing** - Intelligent width calculation based on content
 - **Perfect slide fit** - Always scales to fit within slide boundaries
 - **Corporate formatting** - Clean, professional appearance with customizable styling
-- **Auto-split large tables** - Automatically splits large tables across multiple slides
-- **Header repetition** - Optionally repeat headers on split slides
+- **Format preservation** - Maintains fonts, colors, alignment, and styling
+- **Merged cell support** - Handles complex merged cell layouts
 
-### User-Friendly Interface
-- **Drag-and-drop upload** - Easy file uploading with visual feedback
-- **Live preview** - See how slides will look before conversion
-- **Table range selector** - Interactive selection of data ranges
-- **Formatting options** - Customize fonts, alignment, and spacing
-- **Progress tracking** - Real-time conversion progress indicators
+### Modern User Interface
+- **Responsive design** - Works seamlessly on desktop and mobile devices
+- **Real-time feedback** - Live updates and progress indicators
+- **Error handling** - Comprehensive error messages and recovery options
+- **Accessibility** - Full keyboard navigation and screen reader support
+- **Theme support** - Light and dark mode options
+- **Multi-language** - Internationalization ready
 
 ## 🏗️ Architecture
 
 ### Technology Stack
-- **Frontend**: React 18 with TypeScript, Tailwind CSS
-- **Backend**: FastAPI with Python 3.8+
+- **Frontend**: React 18 with TypeScript, Tailwind CSS, Zustand state management
+- **Backend**: Flask with Python 3.8+, RESTful API architecture
 - **File Processing**: openpyxl for Excel, python-pptx for PowerPoint
-- **Data Analysis**: pandas for data manipulation
-- **Containerization**: Docker and Docker Compose
+- **Data Analysis**: pandas for data manipulation, pivot table generation
+- **Database**: SQLite for label and preset storage
+- **Containerization**: Docker and Docker Compose with multi-stage builds
 
 ### System Architecture
 ```
 ┌─────────────────┐    HTTP/REST API    ┌─────────────────┐
-│  React Frontend │ ◄─────────────────► │  FastAPI Backend │
-│   (Port 3000)   │                     │   (Port 5000)    │
+│  React Frontend │ ◄─────────────────► │  Flask Backend   │
+│   (Port 3000)   │                     │   (Port 8000)    │
+│                 │                     │                  │
+│ • Label Manager │                     │ • Data Processing│
+│ • Pivot Builder │                     │ • Label Storage  │
+│ • File Upload   │                     │ • Excel Export   │
+│ • Excel Preview │                     │ • PPT Generation │
 └─────────────────┘                     └─────────────────┘
         │                                        │
         │                                        │
@@ -49,6 +64,14 @@ A professional web application that converts Excel workbooks into perfectly form
 │   Static Files  │                     │  File Processing │
 │   (Nginx Proxy) │                     │   (Temp Storage) │
 └─────────────────┘                     └─────────────────┘
+                                                 │
+                                                 ▼
+                                        ┌─────────────────┐
+                                        │ SQLite Database │
+                                        │ • Labels        │
+                                        │ • Presets       │
+                                        │ • Relationships │
+                                        └─────────────────┘
 ```
 
 ## 📋 Prerequisites
@@ -121,99 +144,123 @@ npm start
 
 ## 📖 Usage Guide
 
-### Basic Usage
+### Getting Started
 
-1. **Upload Excel File**
-   - Click "Upload Excel File" or drag and drop your .xlsx file
-   - The application will analyze the file and display available worksheets
+1. **Upload Data Sources**
+   - Navigate to the "Data Sources" section
+   - Click "Upload Files" or drag and drop your .xlsx files
+   - The system analyzes each file and extracts metadata
 
-2. **Select Data Ranges**
-   - Choose worksheets and specific data ranges to convert
-   - Preview the data to ensure correct selection
-   - The system automatically detects table structures
+2. **Create Data Labels (Optional)**
+   - Go to the "Labels" section to create reusable data labels
+   - Define expected columns and validation rules
+   - Assign colors and descriptions for easy identification
 
-3. **Configure Formatting**
-   - Adjust font size, family, and alignment
-   - Set row/column spacing and slide orientation
-   - Configure options for large table handling
+3. **Configure Pivot Tables**
+   - Select your data sources
+   - Use the intuitive interface to configure pivot tables:
+     - Drag fields to Rows, Columns, or Values areas
+     - Choose aggregation methods (sum, count, average, etc.)
+     - Search through available fields
+   - Save configurations as presets for future use
 
-4. **Generate Slides**
-   - Click "Generate Slides" to start conversion
-   - Monitor progress through the status indicator
-   - Download the generated PowerPoint file
+4. **Generate Excel Files**
+   - Click "Generate Preview" to see how your Excel file will look
+   - Export the final Excel file with all configured pivot tables
+   - Optionally export to PowerPoint format
 
 ### Advanced Features
 
-#### Table Range Selection
-- **Auto-detection**: System automatically identifies data regions
-- **Manual selection**: Specify exact cell ranges (e.g., A1:Z100)
-- **Multi-range support**: Select multiple ranges from the same sheet
+#### Label Management
+- **Create Labels**: Define reusable templates for recurring data structures
+- **Validation**: Ensure uploaded data matches expected column structures
+- **Usage Tracking**: Monitor how frequently labels are used
+- **Search**: Quickly find labels by name, description, or column names
 
-#### Formatting Options
-- **Font settings**: Size (8-24pt), family (Arial, Times New Roman, etc.)
-- **Alignment**: Left, center, right alignment for tables
-- **Spacing**: Adjust row and column spacing (0.5x - 2.0x)
-- **Orientation**: Horizontal (16:9) or vertical (4:3) slides
+#### Pivot Table Configuration
+- **Multi-source Integration**: Combine data from multiple Excel files
+- **Relationship Detection**: Automatically identify connections between datasets
+- **Field Search**: Search through available columns and data sources
+- **Preset Management**: Save and load pivot table configurations
 
-#### Large Table Handling
-- **Auto-split**: Automatically split tables exceeding row limits
-- **Header repetition**: Repeat headers on each split slide
-- **Custom limits**: Set maximum rows per slide (10-50 rows)
+#### Data Export Options
+- **Excel Export**: Generate comprehensive Excel files with multiple pivot tables
+- **PowerPoint Export**: Convert data to formatted presentation slides
+- **Custom Layouts**: Choose between separate sheets or combined layouts
+- **Raw Data Inclusion**: Optionally include source data in exports
+
+#### PowerPoint Conversion
+- **Smart Table Detection**: Automatically identifies data regions and tables
+- **Format Preservation**: Maintains fonts, colors, alignment, and styling
+- **Adaptive Sizing**: Intelligent width calculation based on content
+- **Merged Cell Support**: Handles complex merged cell layouts
+- **Professional Output**: Clean, corporate-quality presentations
 
 ## 🔌 API Documentation
 
 ### Core Endpoints
 
-#### `POST /api/analyze-excel`
-Analyzes uploaded Excel file and returns sheet information.
+#### Data Source Management
+- `POST /upload` - Upload Excel files and extract metadata
+- `GET /data-sources` - List all uploaded data sources
+- `DELETE /data-sources/{id}` - Delete a specific data source
 
-**Request**: Multipart form data with Excel file
-**Response**: 
-```json
-{
-  "file_id": "unique_file_identifier",
-  "sheets": [
-    {
-      "name": "Sheet1",
-      "rows": 100,
-      "columns": 10,
-      "tables": [...],
-      "data_preview": [...]
-    }
-  ]
-}
-```
+#### Label Management
+- `GET /labels` - List all data labels
+- `POST /labels` - Create a new data label
+- `PUT /labels/{id}` - Update an existing label
+- `DELETE /labels/{id}` - Delete a label
 
-#### `POST /api/preview-slide`
-Generates preview of how a slide will look.
+#### Pivot Table Configuration
+- `GET /pivot-presets` - List all pivot table presets
+- `POST /pivot-presets` - Create a new pivot preset
+- `PUT /pivot-presets/{id}` - Update a pivot preset
+- `DELETE /pivot-presets/{id}` - Delete a pivot preset
+- `GET /pivot-presets/by-label/{label_id}` - Get presets by label
 
-**Request**:
-```json
-{
-  "file_id": "file_identifier",
-  "table_range": {
-    "sheet_name": "Sheet1",
-    "start_cell": "A1",
-    "end_cell": "Z100",
-    "has_headers": true
-  },
-  "formatting": {
-    "font_size": 10,
-    "font_family": "Arial",
-    "table_alignment": "center"
-  }
-}
-```
+#### Data Processing
+- `POST /detect-relationships` - Analyze relationships between data sources
+- `POST /generate-pivot-table` - Create pivot table from configuration
+- `POST /generate-excel-from-preset` - Generate Excel file from preset
+- `POST /export-pivot-table` - Export pivot table to Excel or PowerPoint
 
-#### `POST /api/convert-to-pptx`
-Converts selected ranges to PowerPoint presentation.
-
-**Request**: ConversionRequest with selected ranges and formatting options
-**Response**: PowerPoint file download
-
-#### Health Check Endpoints
+#### Health Check
 - `GET /health` - Backend health status
-- `GET /api/health` - API health status
+
+### API Response Format
+All API responses follow this structure:
+```json
+{
+  "success": true,
+  "data": {...},
+  "error": null,
+  "timestamp": "2024-01-01T00:00:00Z"
+}
+```
+
+### Example Usage
+
+#### Creating a Data Label
+```bash
+curl -X POST http://localhost:8000/labels \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Monthly Sales Report",
+    "description": "Standard monthly sales data structure",
+    "color": "#3B82F6",
+    "expected_columns": ["Date", "Product", "Sales", "Region"]
+  }'
+```
+
+#### Generating Excel from Preset
+```bash
+curl -X POST http://localhost:8000/generate-excel-from-preset \
+  -H "Content-Type: application/json" \
+  -d '{
+    "preset_id": "preset_123",
+    "data_source_ids": ["source_1", "source_2"]
+  }'
+```
 
 ## 🐳 Docker Setup
 
@@ -256,7 +303,7 @@ docker-compose -f docker-compose.prod.yml up --scale backend=3 -d
 ### Project Structure
 ```
 excel2powerpoint/
-├── backend/                    # FastAPI backend
+├── backend/                    # Flask backend
 │   ├── main.py                # Main application file
 │   ├── requirements.txt       # Python dependencies
 │   ├── Dockerfile            # Backend Docker configuration
@@ -264,15 +311,24 @@ excel2powerpoint/
 │   ├── templates/            # HTML templates
 │   ├── uploads/              # File upload directory
 │   └── temp/                 # Temporary file storage
-├── frontend/                  # React frontend
+├── frontend/                  # React TypeScript frontend
 │   ├── src/
 │   │   ├── components/       # React components
-│   │   │   ├── FileUpload.tsx
-│   │   │   ├── FormatOptions.tsx
-│   │   │   ├── SlidePreview.tsx
-│   │   │   └── TableSelector.tsx
+│   │   │   ├── labels/       # Label management
+│   │   │   │   └── LabelManager.tsx
+│   │   │   ├── pivot/        # Pivot table components
+│   │   │   │   ├── PivotPageEnhanced.tsx
+│   │   │   │   ├── PivotTableManager.tsx
+│   │   │   │   ├── PivotConfiguration.tsx
+│   │   │   │   ├── ExcelFilePreview.tsx
+│   │   │   │   └── DataSourceSelector.tsx
+│   │   │   ├── upload/       # File upload components
+│   │   │   │   └── MultiSourceUpload.tsx
+│   │   │   └── SlidePreview.tsx
 │   │   ├── services/         # API services
 │   │   │   └── api.ts
+│   │   ├── stores/           # Zustand state management
+│   │   │   └── appStore.ts
 │   │   ├── types/            # TypeScript types
 │   │   │   └── index.ts
 │   │   └── App.tsx           # Main app component
@@ -283,6 +339,7 @@ excel2powerpoint/
 │   └── nginx.prod.conf       # Production Nginx config
 ├── docker-compose.yml        # Development Docker Compose
 ├── docker-compose.prod.yml   # Production Docker Compose
+├── CLAUDE.md                 # Project documentation
 └── README.md                 # This file
 ```
 
@@ -341,16 +398,23 @@ npm test
 - **API Layer**: RESTful endpoints for frontend communication
 
 ### Frontend Components
-- **FileUpload**: Drag-and-drop file upload with validation
-- **TableSelector**: Interactive table range selection
-- **FormatOptions**: Formatting configuration panel
+- **LabelManager**: Create and manage data source labels
+- **PivotPageEnhanced**: Main pivot table workflow interface
+- **PivotTableManager**: Configure multiple pivot tables
+- **PivotConfiguration**: Drag-and-drop field configuration
+- **ExcelFilePreview**: Preview generated Excel files
+- **DataSourceSelector**: Select and manage data sources
+- **MultiSourceUpload**: Upload multiple Excel files
 - **SlidePreview**: Live preview of generated slides
 
 ### Key Features Implementation
-- **Smart Table Detection**: Analyzes cell patterns to identify tables
+- **Label-Based Organization**: Reusable templates for data structures
+- **Advanced Pivot Tables**: Multiple pivot tables with complex configurations
+- **Real-time Search**: Search through fields and data sources
+- **Data Relationship Detection**: Automatically identify data connections
 - **Responsive Design**: Works on desktop and mobile devices
 - **Error Handling**: Comprehensive error handling and user feedback
-- **Performance**: Optimized for large file processing
+- **Performance**: Optimized for large file processing and multiple data sources
 
 ## 🤝 Contributing
 
