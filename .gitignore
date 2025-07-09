@@ -129,7 +129,7 @@ backend/core/
 backend/database/
 
 # Development frontend structure
-src/react-app-env.d.ts
+**/react-app-env.d.ts
 src/stores/
 src/utils/
 src/components/common/
