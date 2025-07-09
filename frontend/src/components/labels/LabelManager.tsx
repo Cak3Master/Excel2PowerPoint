@@ -36,14 +36,6 @@ export const LabelManager: React.FC<LabelManagerProps> = ({
   const [loading, setLoading] = useState(false);
   const [showDetails, setShowDetails] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadLabels();
-  }, [loadLabels]);
-
-  useEffect(() => {
-    filterLabels();
-  }, [labels, searchTerm, filterLabels]);
-
   const loadLabels = useCallback(async () => {
     setLoading(true);
     try {
@@ -78,6 +70,14 @@ export const LabelManager: React.FC<LabelManagerProps> = ({
       setFilteredLabels(filtered);
     }
   }, [labels, searchTerm]);
+
+  useEffect(() => {
+    loadLabels();
+  }, [loadLabels]);
+
+  useEffect(() => {
+    filterLabels();
+  }, [labels, searchTerm, filterLabels]);
 
   const handleCreateLabel = () => {
     setEditingLabel(null);
