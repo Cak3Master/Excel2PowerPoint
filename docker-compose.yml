@@ -1,6 +1,44 @@
 version: '3.8'
 
 services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: excel2ppt-postgres
+    environment:
+      - POSTGRES_DB=excel2ppt
+      - POSTGRES_USER=app_user
+      - POSTGRES_PASSWORD=app_password
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    networks:
+      - app-network
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app_user -d excel2ppt"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: excel2ppt-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    networks:
+      - app-network
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
   backend:
     build:
       context: ./backend
@@ -11,6 +49,24 @@ services:
       - PYTHONUNBUFFERED=1
       - MAX_UPLOAD_SIZE=100MB
       - CORS_ORIGINS=http://localhost:3000,http://frontend:3000
+      # Database Configuration
+      - DATABASE_URL=postgresql://app_user:app_password@postgres:5432/excel2ppt
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=excel2ppt
+      - POSTGRES_USER=app_user
+      - POSTGRES_PASSWORD=app_password
+      # Redis Configuration
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      # Agent Configuration
+      - AGENT_TIMEOUT=300
+      - AGENT_MAX_RETRIES=3
+      # Security
+      - SECRET_KEY=your-secret-key-change-in-production
+      - JWT_SECRET_KEY=your-jwt-secret-change-in-production
     ports:
       - "5000:5000"
     networks:
@@ -18,13 +74,19 @@ services:
     volumes:
       - ./backend/uploads:/app/uploads
       - ./backend/temp:/app/temp
+      - uploaded_data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5000/health"]
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:5000/health')"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 40s
+      retries: 5
+      start_period: 60s
 
   frontend:
     build:
@@ -32,21 +94,45 @@ services:
       dockerfile: Dockerfile
     container_name: excel2ppt-frontend
     environment:
-      - REACT_APP_API_URL=http://backend:5000
+      - REACT_APP_API_URL=http://localhost:5000
+      - REACT_APP_API_BASE_URL=http://localhost:5000/api/v1
       - NODE_ENV=production
+      - GENERATE_SOURCEMAP=false
     ports:
       - "3000:3000"
     networks:
       - app-network
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  nginx:
+    image: nginx:alpine
+    container_name: excel2ppt-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - app-network
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 networks:
   app-network:
@@ -56,5 +142,13 @@ networks:
         - subnet: 172.20.0.0/16
 
 volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  uploaded_data:
+    driver: local
   uploads:
+    driver: local
   temp:
+    driver: local

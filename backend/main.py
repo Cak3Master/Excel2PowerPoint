@@ -329,8 +329,8 @@ def create_grouped_shape_table(slide, table_data, formatting, left, top, title="
         print(f"No table data to render: {num_rows} rows, {num_cols} columns")
         return None
     
-    # Calculate table dimensions - EXTREMELY generous for column widths
-    max_table_width = 20.0  # inches - increased from 12.0 to prevent ANY wrapping
+    # Calculate table dimensions with reasonable constraints
+    max_table_width = 10.0  # inches - standard slide width with margins
     max_table_height = 6.5 if title else 7.2  # inches
     
     # Use custom column widths if provided, otherwise calculate optimal widths
