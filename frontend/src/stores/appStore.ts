@@ -43,9 +43,19 @@ export const useAppStore = create<AppStore>()(
 
     setCurrentStep: (step) => set({ currentStep: step }),
 
-    addDataSource: (dataSource) => set((state) => ({
-      dataSources: [...state.dataSources, dataSource]
-    })),
+    addDataSource: (dataSource) => set((state) => {
+      // Check if data source already exists and update it
+      const existingIndex = state.dataSources.findIndex(ds => ds.id === dataSource.id);
+      if (existingIndex !== -1) {
+        // Update existing data source
+        const updatedDataSources = [...state.dataSources];
+        updatedDataSources[existingIndex] = dataSource;
+        return { dataSources: updatedDataSources };
+      } else {
+        // Add new data source
+        return { dataSources: [...state.dataSources, dataSource] };
+      }
+    }),
 
     removeDataSource: (sourceId) => set((state) => ({
       dataSources: state.dataSources.filter(ds => ds.id !== sourceId),
