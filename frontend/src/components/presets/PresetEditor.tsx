@@ -126,6 +126,7 @@ export const PresetEditor: React.FC<PresetEditorProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Fixed: Ensure schedule data is properly handled - v2
     const scheduleData = scheduleEnabled ? {
       enabled: true,
       frequency: formData.schedule?.frequency || 'daily',

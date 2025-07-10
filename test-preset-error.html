@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Preset Error Debug</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        button { padding: 10px 20px; margin: 5px; font-size: 16px; cursor: pointer; }
+        .error { color: red; }
+        .success { color: green; }
+        pre { background: #f5f5f5; padding: 10px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Debug Preset Error</h1>
+    
+    <div class="section">
+        <h2>Test API Endpoints</h2>
+        <button onclick="testGetPresets()">Test GET /pivot-presets</button>
+        <button onclick="testCreatePreset()">Test POST /pivot-presets</button>
+        <button onclick="testGenerateExcel()">Test Generate Excel</button>
+    </div>
+    
+    <div class="section">
+        <h2>Local Storage Debug</h2>
+        <button onclick="checkLocalStorage()">Check Local Storage</button>
+        <button onclick="clearPivotStore()">Clear Pivot Store</button>
+        <button onclick="checkAllStorage()">Check All Storage</button>
+    </div>
+    
+    <div class="section">
+        <h2>Results</h2>
+        <div id="results"></div>
+    </div>
+    
+    <script>
+        const API_URL = 'http://localhost:8000';
+        const resultsDiv = document.getElementById('results');
+        
+        function addResult(message, isError = false) {
+            const div = document.createElement('div');
+            div.className = isError ? 'error' : 'success';
+            div.innerHTML = `<strong>${new Date().toLocaleTimeString()}:</strong> ${message}`;
+            resultsDiv.appendChild(div);
+        }
+        
+        async function testGetPresets() {
+            try {
+                const response = await fetch(`${API_URL}/pivot-presets`);
+                const data = await response.json();
+                addResult(`GET /pivot-presets - Status: ${response.status}`);
+                addResult(`<pre>${JSON.stringify(data, null, 2)}</pre>`);
+            } catch (error) {
+                addResult(`GET /pivot-presets failed: ${error.message}`, true);
+            }
+        }
+        
+        async function testCreatePreset() {
+            try {
+                const testPreset = {
+                    name: 'Test Preset',
+                    description: 'Testing preset creation',
+                    pivot_tables: [{
+                        id: 'test_pivot_1',
+                        name: 'Test Pivot',
+                        configuration: {
+                            row_fields: [],
+                            column_fields: [],
+                            value_fields: []
+                        },
+                        sheet_name: 'TestSheet',
+                        position: { row: 0, column: 0 }
+                    }]
+                };
+                
+                const response = await fetch(`${API_URL}/pivot-presets`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(testPreset)
+                });
+                
+                const data = await response.json();
+                addResult(`POST /pivot-presets - Status: ${response.status}`);
+                addResult(`<pre>${JSON.stringify(data, null, 2)}</pre>`);
+                
+                // Store the preset ID for testing generation
+                if (data.data && data.data.id) {
+                    window.testPresetId = data.data.id;
+                    addResult(`Preset ID stored: ${data.data.id}`);
+                }
+            } catch (error) {
+                addResult(`POST /pivot-presets failed: ${error.message}`, true);
+            }
+        }
+        
+        async function testGenerateExcel() {
+            if (!window.testPresetId) {
+                addResult('Please create a preset first!', true);
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}/pivot-presets/${window.testPresetId}/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        data_source_ids: ['test_source_1']
+                    })
+                });
+                
+                const data = await response.json();
+                addResult(`POST /pivot-presets/${window.testPresetId}/generate - Status: ${response.status}`);
+                addResult(`<pre>${JSON.stringify(data, null, 2)}</pre>`);
+                
+                // Check for specific error messages
+                if (data.error && data.error.includes('No Preset')) {
+                    addResult('FOUND "No Preset" ERROR!', true);
+                }
+                if (data.message && data.message.includes('No Preset')) {
+                    addResult('FOUND "No Preset" MESSAGE!', true);
+                }
+            } catch (error) {
+                addResult(`Generate Excel failed: ${error.message}`, true);
+            }
+        }
+        
+        function checkLocalStorage() {
+            addResult('=== Local Storage Contents ===');
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                const value = localStorage.getItem(key);
+                addResult(`${key}: ${value.substring(0, 100)}...`);
+            }
+        }
+        
+        function clearPivotStore() {
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.includes('pivot')) {
+                    keysToRemove.push(key);
+                }
+            }
+            
+            keysToRemove.forEach(key => {
+                localStorage.removeItem(key);
+                addResult(`Removed: ${key}`);
+            });
+            
+            addResult('Pivot store cleared. Please refresh the application.');
+        }
+        
+        function checkAllStorage() {
+            addResult('=== Checking All Storage ===');
+            
+            // Check localStorage
+            addResult(`localStorage items: ${localStorage.length}`);
+            
+            // Check sessionStorage
+            addResult(`sessionStorage items: ${sessionStorage.length}`);
+            
+            // Check for specific pivot-store
+            const pivotStore = localStorage.getItem('pivot-store');
+            if (pivotStore) {
+                try {
+                    const parsed = JSON.parse(pivotStore);
+                    addResult('Pivot Store Contents:');
+                    addResult(`<pre>${JSON.stringify(parsed, null, 2)}</pre>`);
+                } catch (e) {
+                    addResult('Failed to parse pivot store', true);
+                }
+            }
+            
+            // Check for notification patterns
+            const notificationKeys = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                const value = localStorage.getItem(key);
+                if (value && value.includes('No Preset')) {
+                    notificationKeys.push(key);
+                    addResult(`Found "No Preset" in key: ${key}`, true);
+                }
+            }
+        }
+    </script>
+</body>
+</html>

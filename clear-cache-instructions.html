@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Clear Browser Cache Instructions</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            padding: 40px;
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+        h1 { color: #333; }
+        .warning { 
+            background: #fff3cd; 
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .steps {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .steps ol {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        .steps li {
+            margin: 10px 0;
+        }
+        .code {
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 0;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <h1>Clear Browser Cache to Fix Preset Error</h1>
+    
+    <div class="warning">
+        <strong>⚠️ Important:</strong> The browser is using cached JavaScript code. You need to perform a hard refresh to load the fixed code.
+    </div>
+    
+    <div class="steps">
+        <h2>Option 1: Hard Refresh (Recommended)</h2>
+        <ol>
+            <li>Go to your application at <span class="code">http://localhost:3000</span></li>
+            <li>Open Developer Tools (F12)</li>
+            <li>Right-click the Refresh button</li>
+            <li>Select <strong>"Empty Cache and Hard Reload"</strong></li>
+        </ol>
+        
+        <h3>Keyboard Shortcuts:</h3>
+        <ul>
+            <li><strong>Windows/Linux:</strong> <span class="code">Ctrl + Shift + R</span></li>
+            <li><strong>Mac:</strong> <span class="code">Cmd + Shift + R</span></li>
+        </ul>
+    </div>
+    
+    <div class="steps">
+        <h2>Option 2: Clear Storage and Cache</h2>
+        <ol>
+            <li>Open Developer Tools (F12)</li>
+            <li>Go to the <strong>Application</strong> tab (Chrome) or <strong>Storage</strong> tab (Firefox)</li>
+            <li>Click <strong>"Clear site data"</strong> or <strong>"Clear storage"</strong></li>
+            <li>Refresh the page</li>
+        </ol>
+    </div>
+    
+    <div class="steps">
+        <h2>Option 3: Use Incognito/Private Mode</h2>
+        <ol>
+            <li>Open a new Incognito/Private window</li>
+            <li>Navigate to <span class="code">http://localhost:3000</span></li>
+            <li>Test the preset creation</li>
+        </ol>
+    </div>
+    
+    <div class="steps">
+        <h2>Quick Test</h2>
+        <button onclick="testLocalStorage()">Test Local Storage</button>
+        <button onclick="clearAllStorage()">Clear All Storage</button>
+        <div id="results"></div>
+    </div>
+    
+    <script>
+        function testLocalStorage() {
+            const results = document.getElementById('results');
+            results.innerHTML = '<h3>Local Storage Contents:</h3>';
+            
+            if (localStorage.length === 0) {
+                results.innerHTML += '<p>Local storage is empty</p>';
+            } else {
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    const value = localStorage.getItem(key);
+                    results.innerHTML += `<p><strong>${key}:</strong> ${value ? value.substring(0, 100) + '...' : 'null'}</p>`;
+                }
+            }
+        }
+        
+        function clearAllStorage() {
+            localStorage.clear();
+            sessionStorage.clear();
+            
+            // Clear cookies
+            document.cookie.split(";").forEach(function(c) { 
+                document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+            });
+            
+            const results = document.getElementById('results');
+            results.innerHTML = '<p style="color: green;"><strong>✓ All storage cleared!</strong> Now refresh your application.</p>';
+        }
+    </script>
+    
+    <div class="warning" style="background: #d4edda; border-color: #c3e6cb; margin-top: 40px;">
+        <h3>What Was Fixed:</h3>
+        <ul>
+            <li>✓ Fixed "Cannot read properties of null (reading 'frequency')" error in preset creation</li>
+            <li>✓ Added frequency field to schedule configuration</li>
+            <li>✓ Fixed notification scaling for small screens</li>
+            <li>✓ Added debugging to track down "No Preset Selected" error</li>
+        </ul>
+    </div>
+</body>
+</html>
