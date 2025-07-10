@@ -2,6 +2,27 @@
 
 A comprehensive web application that converts Excel workbooks into perfectly formatted PowerPoint presentations, featuring advanced pivot table creation, label-based data management, and multi-source data integration. The application combines a modern React TypeScript frontend with a powerful Flask backend to provide enterprise-grade data processing capabilities.
 
+## ✨ Recent Updates
+
+### Latest Improvements (Current Version)
+- **Fixed Preset Creation Frequency Error**: Resolved duplicate preset creation causing server errors
+- **Enhanced Excel Generation**: Now generates actual Excel pivot tables using pandas, not just formatted data
+- **Improved Notification System**: Fixed scaling, positioning, and auto-dismiss functionality
+- **Comprehensive Debugging**: Added extensive logging and debug endpoints
+- **Fixed Pivot Table Field Editor**: Resolved field list population and drag-and-drop issues
+- **Eliminated Duplicate Rendering**: Fixed MultiSourceUpload component rendering duplicates
+- **Enhanced Error Handling**: Better validation and user-friendly error messages
+- **Performance Optimizations**: Improved memory usage and processing speed
+
+### Current Feature Status
+- ✅ **Core Features**: Complete and fully functional
+- ✅ **Pivot Table System**: Implemented with real Excel pivot table generation
+- ✅ **Label Management**: Complete with validation and color coding
+- ✅ **File Upload**: Working with proper error handling and progress indicators
+- ✅ **Notification System**: Fixed and optimized for better user experience
+- ✅ **PowerPoint Export**: Functional with formatting preservation
+- ✅ **Documentation**: Updated with current features and troubleshooting guides
+
 ## 🚀 Features
 
 ### Advanced Data Management
@@ -40,10 +61,10 @@ A comprehensive web application that converts Excel workbooks into perfectly for
 
 ### Technology Stack
 - **Frontend**: React 18 with TypeScript, Tailwind CSS, Zustand state management
-- **Backend**: Flask with Python 3.8+, RESTful API architecture
+- **Backend**: FastAPI with Python 3.8+, RESTful API architecture
 - **File Processing**: openpyxl for Excel, python-pptx for PowerPoint
 - **Data Analysis**: pandas for data manipulation, pivot table generation
-- **Database**: SQLite for label and preset storage
+- **State Management**: Zustand for frontend state, in-memory data storage
 - **Containerization**: Docker and Docker Compose with multi-stage builds
 
 ### System Architecture
@@ -125,6 +146,15 @@ venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
+
+# Required Python packages:
+# - fastapi==0.104.1
+# - uvicorn[standard]==0.24.0
+# - python-multipart==0.0.6
+# - openpyxl==3.1.2
+# - pandas==2.1.3
+# - python-pptx==0.6.23
+# - pydantic==2.5.0
 
 # Run the backend server
 uvicorn main:app --reload --host 0.0.0.0 --port 5000
@@ -303,12 +333,10 @@ docker-compose -f docker-compose.prod.yml up --scale backend=3 -d
 ### Project Structure
 ```
 excel2powerpoint/
-├── backend/                    # Flask backend
+├── backend/                    # FastAPI backend
 │   ├── main.py                # Main application file
 │   ├── requirements.txt       # Python dependencies
 │   ├── Dockerfile            # Backend Docker configuration
-│   ├── static/               # Static assets
-│   ├── templates/            # HTML templates
 │   ├── uploads/              # File upload directory
 │   └── temp/                 # Temporary file storage
 ├── frontend/                  # React TypeScript frontend
@@ -335,10 +363,7 @@ excel2powerpoint/
 │   ├── package.json          # Node dependencies
 │   ├── Dockerfile            # Frontend Docker configuration
 │   └── tailwind.config.js    # Tailwind CSS configuration
-├── nginx/                     # Nginx configuration
-│   └── nginx.prod.conf       # Production Nginx config
 ├── docker-compose.yml        # Development Docker Compose
-├── docker-compose.prod.yml   # Production Docker Compose
 ├── CLAUDE.md                 # Project documentation
 └── README.md                 # This file
 ```
@@ -449,8 +474,21 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 #### "File not found" errors
 - Ensure the uploaded file is in .xlsx format
-- Check file permissions and size limits
-- Verify the file is not corrupted
+- Check file permissions and size limits (max 100MB)
+- Verify the file is not corrupted or password-protected
+- Check backend uploads directory permissions
+
+#### Pivot table generation errors
+- Verify data sources are properly uploaded
+- Check that field names match between configuration and data
+- Ensure pivot table configuration has at least one row, column, or value field
+- Review console logs for detailed error messages
+
+#### Excel export failures
+- Confirm pandas and openpyxl are properly installed
+- Check that pivot table configuration is valid
+- Verify data sources contain actual data
+- Ensure sufficient disk space for temporary files
 
 #### Docker build failures
 ```bash
@@ -459,17 +497,35 @@ docker system prune -af
 
 # Rebuild without cache
 docker-compose build --no-cache
+
+# Check logs for specific errors
+docker-compose logs backend
+docker-compose logs frontend
 ```
 
 #### Frontend not connecting to backend
 - Check if backend is running on port 5000
-- Verify CORS settings in backend configuration
+- Verify CORS settings allow frontend origin
 - Check firewall and network settings
+- Ensure FastAPI server is accessible: http://localhost:5000/docs
 
 #### Memory issues with large files
-- Increase Docker memory limits
+- Increase Docker memory limits (recommended 4GB+)
 - Process files in smaller chunks
 - Check available system memory
+- Monitor temp directory disk usage
+
+#### Notification system issues
+- Check browser console for JavaScript errors
+- Verify Zustand store state management
+- Clear browser cache and local storage
+- Check notification timeout and scaling settings
+
+#### Label creation frequency errors
+- This issue has been fixed in recent updates
+- Ensure latest code is deployed
+- Check browser console for validation errors
+- Verify label name uniqueness requirements
 
 ### Performance Optimization
 
@@ -489,7 +545,15 @@ docker-compose build --no-cache
 ```bash
 # Enable debug logging
 export LOG_LEVEL=DEBUG
-uvicorn main:app --reload --log-level debug
+uvicorn main:app --reload --log-level debug --host 0.0.0.0 --port 5000
+
+# Check API endpoints
+curl http://localhost:5000/health
+curl http://localhost:5000/docs
+
+# Monitor file uploads
+ls -la backend/uploads/
+ls -la backend/temp/
 ```
 
 #### Frontend Debugging
@@ -497,6 +561,23 @@ uvicorn main:app --reload --log-level debug
 # Enable verbose logging
 export REACT_APP_DEBUG=true
 npm start
+
+# Check network requests in browser DevTools
+# Monitor Zustand store state
+# Check React component re-renders
+```
+
+#### Development Testing
+```bash
+# Test file upload
+curl -X POST http://localhost:5000/upload \
+  -F "file=@sample.xlsx" \
+  -F "label_id=optional_label_id"
+
+# Test pivot table generation
+curl -X POST http://localhost:5000/generate-pivot-table \
+  -H "Content-Type: application/json" \
+  -d '{"data_source_ids": ["source_id"], "configuration": {...}}'
 ```
 
 ## 🆘 Support
