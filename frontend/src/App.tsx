@@ -56,12 +56,16 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   
   // Use global store for data sources
-  const { dataSources, addDataSource, removeDataSource } = useAppStore();
+  const { dataSources, addDataSource, updateDataSource, removeDataSource } = useAppStore();
   
   // Multi-source upload handlers
   const handleDataSourceAdded = useCallback((dataSource: DataSource) => {
     addDataSource(dataSource);
   }, [addDataSource]);
+  
+  const handleDataSourceUpdated = useCallback((dataSource: DataSource) => {
+    updateDataSource(dataSource);
+  }, [updateDataSource]);
   
   const handleDataSourceRemoved = useCallback((sourceId: string) => {
     removeDataSource(sourceId);
@@ -232,6 +236,7 @@ function App() {
           <MultiSourceUpload 
             dataSources={dataSources}
             onDataSourceAdded={handleDataSourceAdded}
+            onDataSourceUpdated={handleDataSourceUpdated}
             onDataSourceRemoved={handleDataSourceRemoved}
           />
         );

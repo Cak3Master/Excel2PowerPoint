@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   PlusIcon, 
   DocumentIcon, 
@@ -10,7 +10,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { PivotTableDefinition, DataSource, PivotPreset, ExcelFilePreview } from '../../types';
 import { PivotConfiguration } from './PivotConfiguration';
-import { useNotificationStore } from '../../stores/appStore';
+import { useNotificationStore, usePivotStore } from '../../stores/appStore';
 import { generateExcelFromPreset } from '../../services/api';
 
 interface PivotTableManagerProps {
@@ -29,50 +29,95 @@ export const PivotTableManager: React.FC<PivotTableManagerProps> = ({
   onPresetUpdate
 }) => {
   const { addNotification } = useNotificationStore();
-  const [pivotTables, setPivotTables] = useState<PivotTableDefinition[]>(() => {
-    try {
-      const tables = preset?.pivot_tables || [];
-      if (!Array.isArray(tables)) return [];
-      return tables.filter(table => {
-        try {
-          return table && typeof table === 'object' && table.id;
-        } catch {
-          return false;
-        }
-      });
-    } catch {
-      return [];
+  const { pivotTables, setPivotTables, currentPreset, setCurrentPreset } = usePivotStore();
+
+  // Helper function to check prerequisites
+  const checkPrerequisites = () => {
+    if (!dataSources || dataSources.length === 0) {
+      return { valid: false, reason: 'no-sources', message: 'No data sources available' };
     }
-  });
+    if (!selectedSources || selectedSources.length === 0) {
+      return { valid: false, reason: 'no-selection', message: 'No data sources selected' };
+    }
+    return { valid: true, reason: null, message: null };
+  };
+  
+  // Initialize pivot tables from preset if not already loaded
+  const [initialized, setInitialized] = useState(false);
   const [activePivotIndex, setActivePivotIndex] = useState<number | null>(null);
   const [isConfiguring, setIsConfiguring] = useState(false);
   const [editingPivot, setEditingPivot] = useState<PivotTableDefinition | null>(null);
   const [generatingPreview, setGeneratingPreview] = useState(false);
+  const [pendingConfiguration, setPendingConfiguration] = useState<any>(null);
 
+  // Initialize pivot tables from preset when component loads or preset changes
   useEffect(() => {
     try {
-      if (preset) {
-        const tables = preset.pivot_tables || [];
-        if (!Array.isArray(tables)) {
-          setPivotTables([]);
-          return;
-        }
-        const validTables = tables.filter(table => {
-          try {
-            return table && typeof table === 'object' && table.id;
-          } catch {
-            return false;
+      if (!initialized) {
+        // Always initialize from store first, then from preset
+        if (pivotTables.length > 0) {
+          // State already exists in store - don't overwrite it
+          setInitialized(true);
+        } else if (preset?.pivot_tables) {
+          // Initialize from preset only if store is empty
+          const tables = preset.pivot_tables || [];
+          if (Array.isArray(tables)) {
+            const validTables = tables.filter(table => {
+              try {
+                return table && typeof table === 'object' && table.id;
+              } catch {
+                return false;
+              }
+            });
+            setPivotTables(validTables);
           }
-        });
-        setPivotTables(validTables);
+          setCurrentPreset(preset);
+          setInitialized(true);
+        } else {
+          // Empty initialization
+          setPivotTables([]);
+          setCurrentPreset(null);
+          setInitialized(true);
+        }
+      } else if (preset && preset.id !== currentPreset?.id) {
+        // Only update if preset actually changed
+        const tables = preset.pivot_tables || [];
+        if (Array.isArray(tables)) {
+          const validTables = tables.filter(table => {
+            try {
+              return table && typeof table === 'object' && table.id;
+            } catch {
+              return false;
+            }
+          });
+          setPivotTables(validTables);
+        }
+        setCurrentPreset(preset);
       }
     } catch (error) {
       console.error('Error updating pivot tables from preset:', error);
-      setPivotTables([]);
+      if (!initialized) {
+        setPivotTables([]);
+        setCurrentPreset(null);
+        setInitialized(true);
+      }
     }
-  }, [preset]);
+  }, [preset, initialized, currentPreset, pivotTables.length, setPivotTables, setCurrentPreset]);
 
   const createNewPivotTable = () => {
+    // Validate prerequisites before creating new pivot table
+    const prerequisites = checkPrerequisites();
+    if (!prerequisites.valid) {
+      addNotification({
+        type: 'warning',
+        title: prerequisites.reason === 'no-sources' ? 'No Data Sources Available' : 'No Data Sources Selected',
+        message: prerequisites.reason === 'no-sources' 
+          ? 'Please upload data sources before creating pivot tables'
+          : 'Please select at least one data source to create a pivot table'
+      });
+      return;
+    }
+
     const newPivot: PivotTableDefinition = {
       id: `pivot_${Date.now()}`,
       name: `Pivot Table ${pivotTables.length + 1}`,
@@ -91,19 +136,49 @@ export const PivotTableManager: React.FC<PivotTableManagerProps> = ({
     };
 
     const updatedTables = [...(pivotTables || []), newPivot].filter(table => table && table.id);
-    setPivotTables(updatedTables);
+    updatePreset(updatedTables);
     setEditingPivot(newPivot);
     setActivePivotIndex(pivotTables.length);
     setIsConfiguring(true);
+
+    // Show success feedback
+    addNotification({
+      type: 'success',
+      title: 'Pivot Table Created',
+      message: `Created new pivot table: ${newPivot.name}`
+    });
   };
 
   const editPivotTable = (index: number) => {
+    console.log('Editing pivot table:', index, pivotTables[index]);
+    
+    // Validate prerequisites before opening configuration
+    const prerequisites = checkPrerequisites();
+    if (!prerequisites.valid) {
+      addNotification({
+        type: 'warning',
+        title: prerequisites.reason === 'no-sources' ? 'No Data Sources Available' : 'No Data Sources Selected',
+        message: prerequisites.reason === 'no-sources' 
+          ? 'Please upload data sources before configuring pivot tables'
+          : 'Please select at least one data source to configure this pivot table'
+      });
+      return;
+    }
+
+    // Show success feedback when opening configuration
+    addNotification({
+      type: 'info',
+      title: 'Configuration Opened',
+      message: `Configuring pivot table: ${pivotTables[index].name}`
+    });
+
     setEditingPivot(pivotTables[index]);
     setActivePivotIndex(index);
     setIsConfiguring(true);
   };
 
   const deletePivotTable = (index: number) => {
+    const pivotToDelete = pivotTables[index];
     if (confirm('Are you sure you want to delete this pivot table?')) {
       const newPivotTables = (pivotTables || []).filter((table, i) => table && table.id && i !== index);
       setPivotTables(newPivotTables);
@@ -114,6 +189,13 @@ export const PivotTableManager: React.FC<PivotTableManagerProps> = ({
       }
       
       updatePreset(newPivotTables);
+
+      // Show success feedback
+      addNotification({
+        type: 'success',
+        title: 'Pivot Table Deleted',
+        message: `Deleted pivot table: ${pivotToDelete.name}`
+      });
     }
   };
 
@@ -130,40 +212,99 @@ export const PivotTableManager: React.FC<PivotTableManagerProps> = ({
     const updatedTables = [...(pivotTables || []), duplicatedPivot].filter(table => table && table.id);
     setPivotTables(updatedTables);
     updatePreset(updatedTables);
+
+    // Show success feedback
+    addNotification({
+      type: 'success',
+      title: 'Pivot Table Duplicated',
+      message: `Created copy: ${duplicatedPivot.name}`
+    });
   };
 
   const savePivotConfiguration = (configuration: any) => {
-    if (!editingPivot) return;
+    console.log('savePivotConfiguration called with:', configuration);
+    console.log('editingPivot:', editingPivot);
+    console.log('activePivotIndex:', activePivotIndex);
+    
+    if (!editingPivot) {
+      console.warn('No editing pivot found, returning');
+      return;
+    }
+
+    // Handle configuration structure from PivotConfiguration component
+    let finalConfiguration;
+    if (configuration.rowFields && configuration.columnFields && configuration.valueFields) {
+      // Configuration from PivotConfiguration component
+      console.log('Using rowFields/columnFields/valueFields structure');
+      finalConfiguration = {
+        row_fields: configuration.rowFields,
+        column_fields: configuration.columnFields,
+        value_fields: configuration.valueFields
+      };
+    } else {
+      // Direct configuration object
+      console.log('Using direct configuration structure');
+      finalConfiguration = configuration;
+    }
+
+    console.log('Final configuration:', finalConfiguration);
 
     const updatedPivot: PivotTableDefinition = {
       ...editingPivot,
-      configuration: configuration
+      configuration: finalConfiguration
     };
+
+    console.log('Updated pivot:', updatedPivot);
 
     const newPivotTables = [...(pivotTables || [])];
     if (activePivotIndex !== null) {
       newPivotTables[activePivotIndex] = updatedPivot;
+      console.log('Updated existing pivot at index:', activePivotIndex);
     } else {
       newPivotTables.push(updatedPivot);
+      console.log('Added new pivot');
     }
 
     const validTables = newPivotTables.filter(table => table && table.id);
+    console.log('Valid tables after update:', validTables);
+    
     setPivotTables(validTables);
     setIsConfiguring(false);
     setEditingPivot(null);
     setActivePivotIndex(null);
+    setPendingConfiguration(null);
     
     updatePreset(validTables);
+
+    // Show success feedback
+    addNotification({
+      type: 'success',
+      title: 'Configuration Saved',
+      message: `Pivot table configuration saved successfully`
+    });
   };
 
   const updatePreset = (newPivotTables: PivotTableDefinition[]) => {
+    // Update global store first
+    setPivotTables(newPivotTables);
+    
+    // Update preset if available
     if (preset && onPresetUpdate) {
       const updatedPreset: PivotPreset = {
         ...preset,
         pivot_tables: newPivotTables,
         updated_at: new Date().toISOString()
       };
+      setCurrentPreset(updatedPreset);
       onPresetUpdate(updatedPreset);
+    } else if (currentPreset) {
+      // Update current preset in store even if no callback
+      const updatedPreset = {
+        ...currentPreset,
+        pivot_tables: newPivotTables,
+        updated_at: new Date().toISOString()
+      };
+      setCurrentPreset(updatedPreset);
     }
   };
 
@@ -237,17 +378,26 @@ export const PivotTableManager: React.FC<PivotTableManagerProps> = ({
           <div className="flex items-center space-x-2">
             <button
               onClick={() => {
+                console.log('Canceling pivot configuration');
                 setIsConfiguring(false);
                 setEditingPivot(null);
                 setActivePivotIndex(null);
+                setPendingConfiguration(null);
               }}
               className="px-3 py-1 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
             >
               Cancel
             </button>
             <button
-              onClick={() => savePivotConfiguration(editingPivot.configuration)}
+              onClick={() => {
+                const configToSave = pendingConfiguration || editingPivot.configuration;
+                console.log('Saving pivot configuration:', configToSave);
+                savePivotConfiguration(configToSave);
+              }}
               className="px-3 py-1 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+              disabled={!pendingConfiguration && (!editingPivot.configuration?.row_fields?.length && 
+                       !editingPivot.configuration?.column_fields?.length && 
+                       !editingPivot.configuration?.value_fields?.length)}
             >
               Save Configuration
             </button>
@@ -258,7 +408,14 @@ export const PivotTableManager: React.FC<PivotTableManagerProps> = ({
           dataSources={dataSources}
           selectedSources={selectedSources}
           initialConfiguration={editingPivot.configuration}
-          onConfigurationChange={savePivotConfiguration}
+          onConfigurationChange={useCallback((config) => {
+            // Store the configuration in pending state instead of updating editingPivot directly
+            setPendingConfiguration({
+              row_fields: config.rowFields,
+              column_fields: config.columnFields,
+              value_fields: config.valueFields
+            });
+          }, [])}
         />
       </div>
     );
@@ -277,7 +434,19 @@ export const PivotTableManager: React.FC<PivotTableManagerProps> = ({
         <div className="flex items-center space-x-2">
           <button
             onClick={createNewPivotTable}
-            className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+            disabled={!checkPrerequisites().valid}
+            className={`inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md ${
+              !checkPrerequisites().valid
+                ? 'text-gray-400 bg-gray-300 cursor-not-allowed'
+                : 'text-white bg-blue-600 hover:bg-blue-700'
+            }`}
+            title={
+              checkPrerequisites().valid
+                ? 'Create a new pivot table'
+                : checkPrerequisites().reason === 'no-sources'
+                ? 'No data sources available - please upload data first'
+                : 'No data sources selected - please select data sources first'
+            }
           >
             <PlusIcon className="h-4 w-4 mr-2" />
             Add Pivot Table
@@ -383,8 +552,19 @@ export const PivotTableManager: React.FC<PivotTableManagerProps> = ({
                 <div className="flex items-center space-x-1">
                   <button
                     onClick={() => editPivotTable(index)}
-                    className="p-1 text-gray-400 hover:text-blue-600 rounded"
-                    title="Configure"
+                    disabled={!checkPrerequisites().valid}
+                    className={`p-1 rounded transition-colors ${
+                      !checkPrerequisites().valid
+                        ? 'text-gray-300 cursor-not-allowed'
+                        : 'text-gray-400 hover:text-blue-600'
+                    }`}
+                    title={
+                      checkPrerequisites().valid
+                        ? `Configure ${pivot.name}`
+                        : checkPrerequisites().reason === 'no-sources'
+                        ? 'No data sources available'
+                        : 'No data sources selected'
+                    }
                   >
                     <CogIcon className="h-4 w-4" />
                   </button>
@@ -417,11 +597,28 @@ export const PivotTableManager: React.FC<PivotTableManagerProps> = ({
           <ChartBarIcon className="mx-auto h-12 w-12 text-gray-300" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">No pivot tables</h3>
           <p className="mt-1 text-sm text-gray-500">
-            Create your first pivot table to get started
+            {checkPrerequisites().valid
+              ? 'Create your first pivot table to get started'
+              : checkPrerequisites().reason === 'no-sources'
+              ? 'Upload data sources first, then create your pivot tables'
+              : 'Select data sources first, then create your pivot tables'
+            }
           </p>
           <button
             onClick={createNewPivotTable}
-            className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+            disabled={!checkPrerequisites().valid}
+            className={`mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md ${
+              !checkPrerequisites().valid
+                ? 'text-gray-400 bg-gray-300 cursor-not-allowed'
+                : 'text-white bg-blue-600 hover:bg-blue-700'
+            }`}
+            title={
+              checkPrerequisites().valid
+                ? 'Create your first pivot table'
+                : checkPrerequisites().reason === 'no-sources'
+                ? 'No data sources available - please upload data first'
+                : 'No data sources selected - please select data sources first'
+            }
           >
             <PlusIcon className="h-4 w-4 mr-2" />
             Create Pivot Table

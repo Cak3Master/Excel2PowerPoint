@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Pivot Table Fix</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-case { border: 1px solid #ccc; padding: 10px; margin: 10px 0; }
+        .success { background-color: #d4edda; }
+        .error { background-color: #f8d7da; }
+    </style>
+</head>
+<body>
+    <h1>Pivot Table Error Fix Test</h1>
+    
+    <div class="test-case">
+        <h3>Test 1: hasConfiguration with undefined</h3>
+        <div id="test1-result"></div>
+    </div>
+    
+    <div class="test-case">
+        <h3>Test 2: hasConfiguration with null configuration</h3>
+        <div id="test2-result"></div>
+    </div>
+    
+    <div class="test-case">
+        <h3>Test 3: hasConfiguration with invalid structure</h3>
+        <div id="test3-result"></div>
+    </div>
+
+    <script>
+        // Simulate the fixed hasConfiguration function
+        function hasConfiguration(pivot) {
+            try {
+                // Extremely defensive approach
+                if (!pivot) return false;
+                if (typeof pivot !== 'object') return false;
+                if (!pivot.configuration) return false;
+                if (typeof pivot.configuration !== 'object') return false;
+                
+                const config = pivot.configuration;
+                const rowFields = Array.isArray(config.row_fields) ? config.row_fields : [];
+                const columnFields = Array.isArray(config.column_fields) ? config.column_fields : [];
+                const valueFields = Array.isArray(config.value_fields) ? config.value_fields : [];
+                
+                return rowFields.length > 0 || columnFields.length > 0 || valueFields.length > 0;
+            } catch (error) {
+                console.error('Error in hasConfiguration:', error, pivot);
+                return false;
+            }
+        }
+
+        // Test 1: undefined pivot
+        function test1() {
+            let result, error = null;
+            try {
+                result = hasConfiguration(undefined);
+            } catch (e) {
+                error = e;
+            }
+            
+            document.getElementById('test1-result').innerHTML = `
+                <p>Input: undefined</p>
+                <p>Result: ${result}</p>
+                <p>Error: ${error ? error.message : 'None'}</p>
+                <p class="${!error && result === false ? 'success' : 'error'}">${!error && result === false ? 'PASS' : 'FAIL'}</p>
+            `;
+        }
+
+        // Test 2: null configuration
+        function test2() {
+            const pivot = { id: 'test', configuration: null };
+            let result, error = null;
+            try {
+                result = hasConfiguration(pivot);
+            } catch (e) {
+                error = e;
+            }
+            
+            document.getElementById('test2-result').innerHTML = `
+                <p>Input: {id: 'test', configuration: null}</p>
+                <p>Result: ${result}</p>
+                <p>Error: ${error ? error.message : 'None'}</p>
+                <p class="${!error && result === false ? 'success' : 'error'}">${!error && result === false ? 'PASS' : 'FAIL'}</p>
+            `;
+        }
+
+        // Test 3: invalid structure
+        function test3() {
+            const pivot = { 
+                id: 'test', 
+                configuration: { 
+                    row_fields: undefined, 
+                    column_fields: 'not-array', 
+                    value_fields: null 
+                } 
+            };
+            let result, error = null;
+            try {
+                result = hasConfiguration(pivot);
+            } catch (e) {
+                error = e;
+            }
+            
+            document.getElementById('test3-result').innerHTML = `
+                <p>Input: Invalid field types</p>
+                <p>Result: ${result}</p>
+                <p>Error: ${error ? error.message : 'None'}</p>
+                <p class="${!error && result === false ? 'success' : 'error'}">${!error && result === false ? 'PASS' : 'FAIL'}</p>
+            `;
+        }
+
+        // Run tests
+        test1();
+        test2();
+        test3();
+        
+        console.log('All tests completed. The fixed function should handle all edge cases without throwing errors.');
+    </script>
+</body>
+</html>

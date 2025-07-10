@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Duplicate Data Source Fix</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-case { border: 1px solid #ccc; padding: 10px; margin: 10px 0; }
+        .success { background-color: #d4edda; }
+        .error { background-color: #f8d7da; }
+    </style>
+</head>
+<body>
+    <h1>Data Source Deduplication Test</h1>
+    
+    <div class="test-case">
+        <h3>Test 1: Map-based Deduplication</h3>
+        <p>Testing Array.from(new Map(dataSources.map(source => [source.id, source])).values())</p>
+        <div id="test1-result"></div>
+    </div>
+    
+    <div class="test-case">
+        <h3>Test 2: Filter-based Deduplication</h3>
+        <p>Testing dataSources.filter((source, index, self) => index === self.findIndex(s => s.id === source.id))</p>
+        <div id="test2-result"></div>
+    </div>
+    
+    <div class="test-case">
+        <h3>Test 3: Store Update Logic</h3>
+        <p>Testing updateDataSource vs addDataSource behavior</p>
+        <div id="test3-result"></div>
+    </div>
+
+    <script>
+        // Test data with duplicates
+        const testDataSources = [
+            { id: 'ds_123', name: 'Test File 1', label_assignments: [] },
+            { id: 'ds_456', name: 'Test File 2', label_assignments: [] },
+            { id: 'ds_123', name: 'Test File 1', label_assignments: [{ id: 'label_1' }] }, // duplicate with updated labels
+            { id: 'ds_789', name: 'Test File 3', label_assignments: [] }
+        ];
+
+        // Test 1: Map-based deduplication
+        function testMapDeduplication() {
+            const result = Array.from(new Map(testDataSources.map(source => [source.id, source])).values());
+            const success = result.length === 3 && result.find(s => s.id === 'ds_123').label_assignments.length === 1;
+            
+            document.getElementById('test1-result').innerHTML = `
+                <p>Original: ${testDataSources.length} items</p>
+                <p>Deduplicated: ${result.length} items</p>
+                <p>ds_123 labels: ${result.find(s => s.id === 'ds_123').label_assignments.length}</p>
+                <p class="${success ? 'success' : 'error'}">${success ? 'PASS' : 'FAIL'}</p>
+            `;
+        }
+
+        // Test 2: Filter-based deduplication
+        function testFilterDeduplication() {
+            const result = testDataSources.filter((source, index, self) => 
+                index === self.findIndex(s => s.id === source.id)
+            );
+            const success = result.length === 3 && result.find(s => s.id === 'ds_123').label_assignments.length === 0;
+            
+            document.getElementById('test2-result').innerHTML = `
+                <p>Original: ${testDataSources.length} items</p>
+                <p>Deduplicated: ${result.length} items</p>
+                <p>ds_123 labels: ${result.find(s => s.id === 'ds_123').label_assignments.length}</p>
+                <p class="${success ? 'success' : 'error'}">${success ? 'PASS (keeps first)' : 'FAIL'}</p>
+            `;
+        }
+
+        // Test 3: Store update logic simulation
+        function testStoreUpdateLogic() {
+            let dataSources = [
+                { id: 'ds_123', name: 'Test File 1', label_assignments: [] }
+            ];
+            
+            // Simulate addDataSource with update
+            const updatedSource = { id: 'ds_123', name: 'Test File 1', label_assignments: [{ id: 'label_1' }] };
+            
+            const existingIndex = dataSources.findIndex(ds => ds.id === updatedSource.id);
+            if (existingIndex !== -1) {
+                if (JSON.stringify(dataSources[existingIndex]) !== JSON.stringify(updatedSource)) {
+                    dataSources[existingIndex] = updatedSource;
+                }
+            }
+            
+            const success = dataSources.length === 1 && dataSources[0].label_assignments.length === 1;
+            
+            document.getElementById('test3-result').innerHTML = `
+                <p>Final array length: ${dataSources.length}</p>
+                <p>ds_123 labels: ${dataSources[0].label_assignments.length}</p>
+                <p class="${success ? 'success' : 'error'}">${success ? 'PASS' : 'FAIL'}</p>
+            `;
+        }
+
+        // Run tests
+        testMapDeduplication();
+        testFilterDeduplication();
+        testStoreUpdateLogic();
+    </script>
+</body>
+</html>

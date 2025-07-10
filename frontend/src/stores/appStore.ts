@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { subscribeWithSelector } from 'zustand/middleware';
+import { subscribeWithSelector, persist } from 'zustand/middleware';
 import { 
   AppState, 
   DataSource, 
@@ -14,6 +14,7 @@ interface AppStore extends AppState {
   // Actions
   setCurrentStep: (step: AppState['currentStep']) => void;
   addDataSource: (dataSource: DataSource) => void;
+  updateDataSource: (dataSource: DataSource) => void;
   removeDataSource: (sourceId: string) => void;
   setActiveDataSource: (sourceId: string | undefined) => void;
   setAnalysisResults: (results: DataAnalysisResult) => void;
@@ -44,17 +45,41 @@ export const useAppStore = create<AppStore>()(
     setCurrentStep: (step) => set({ currentStep: step }),
 
     addDataSource: (dataSource) => set((state) => {
-      // Check if data source already exists and update it
+      // Check if data source already exists
       const existingIndex = state.dataSources.findIndex(ds => ds.id === dataSource.id);
       if (existingIndex !== -1) {
+        // Avoid updating if it's the same object reference or same content
+        const existing = state.dataSources[existingIndex];
+        if (existing === dataSource || JSON.stringify(existing) === JSON.stringify(dataSource)) {
+          return state; // No change needed
+        }
         // Update existing data source
         const updatedDataSources = [...state.dataSources];
         updatedDataSources[existingIndex] = dataSource;
-        return { dataSources: updatedDataSources };
+        // Ensure no duplicates in final array
+        const deduplicatedSources = Array.from(new Map(updatedDataSources.map(ds => [ds.id, ds])).values());
+        return { dataSources: deduplicatedSources };
       } else {
-        // Add new data source
-        return { dataSources: [...state.dataSources, dataSource] };
+        // Add new data source and deduplicate
+        const newDataSources = [...state.dataSources, dataSource];
+        const deduplicatedSources = Array.from(new Map(newDataSources.map(ds => [ds.id, ds])).values());
+        return { dataSources: deduplicatedSources };
       }
+    }),
+
+    updateDataSource: (dataSource) => set((state) => {
+      const existingIndex = state.dataSources.findIndex(ds => ds.id === dataSource.id);
+      if (existingIndex !== -1) {
+        const updatedDataSources = [...state.dataSources];
+        updatedDataSources[existingIndex] = dataSource;
+        // Ensure no duplicates in final array
+        const deduplicatedSources = Array.from(new Map(updatedDataSources.map(ds => [ds.id, ds])).values());
+        return { dataSources: deduplicatedSources };
+      }
+      // If data source doesn't exist, add it and deduplicate
+      const newDataSources = [...state.dataSources, dataSource];
+      const deduplicatedSources = Array.from(new Map(newDataSources.map(ds => [ds.id, ds])).values());
+      return { dataSources: deduplicatedSources };
     }),
 
     removeDataSource: (sourceId) => set((state) => ({
@@ -133,6 +158,8 @@ interface PivotStore {
   selectedSources: string[];
   pivotConfiguration: PivotConfiguration | null;
   pivotResult: any | null;
+  pivotTables: any[]; // Store for pivot table definitions
+  currentPreset: any | null; // Store for current preset
   setRelationships: (relationships: any[]) => void;
   setJoinStrategies: (strategies: any[]) => void;
   addToPivotHistory: (config: PivotConfiguration) => void;
@@ -140,39 +167,63 @@ interface PivotStore {
   setSelectedSources: (sources: string[]) => void;
   setPivotConfiguration: (config: PivotConfiguration | null) => void;
   setPivotResult: (result: any | null) => void;
+  setPivotTables: (tables: any[]) => void;
+  setCurrentPreset: (preset: any | null) => void;
   clearPivotData: () => void;
 }
 
-export const usePivotStore = create<PivotStore>((set) => ({
-  relationships: [],
-  joinStrategies: [],
-  pivotHistory: [],
-  currentPivotResult: null,
-  selectedSources: [],
-  pivotConfiguration: null,
-  pivotResult: null,
+export const usePivotStore = create<PivotStore>()(
+  persist(
+    (set) => ({
+      relationships: [],
+      joinStrategies: [],
+      pivotHistory: [],
+      currentPivotResult: null,
+      selectedSources: [],
+      pivotConfiguration: null,
+      pivotResult: null,
+      pivotTables: [],
+      currentPreset: null,
 
-  setRelationships: (relationships) => set({ relationships }),
-  setJoinStrategies: (strategies) => set({ joinStrategies: strategies }),
-  
-  addToPivotHistory: (config) => set((state) => ({
-    pivotHistory: [config, ...state.pivotHistory].slice(0, 5) // Keep last 5
-  })),
+      setRelationships: (relationships) => set({ relationships }),
+      setJoinStrategies: (strategies) => set({ joinStrategies: strategies }),
+      
+      addToPivotHistory: (config) => set((state) => ({
+        pivotHistory: [config, ...state.pivotHistory].slice(0, 5) // Keep last 5
+      })),
 
-  setCurrentPivotResult: (result) => set({ currentPivotResult: result }),
-  setSelectedSources: (sources) => set({ selectedSources: sources }),
-  setPivotConfiguration: (config) => set({ pivotConfiguration: config }),
-  setPivotResult: (result) => set({ pivotResult: result }),
+      setCurrentPivotResult: (result) => set({ currentPivotResult: result }),
+      setSelectedSources: (sources) => set({ selectedSources: sources }),
+      setPivotConfiguration: (config) => set({ pivotConfiguration: config }),
+      setPivotResult: (result) => set({ pivotResult: result }),
+      setPivotTables: (tables) => set({ pivotTables: tables }),
+      setCurrentPreset: (preset) => set({ currentPreset: preset }),
 
-  clearPivotData: () => set({ 
-    relationships: [], 
-    joinStrategies: [], 
-    currentPivotResult: null,
-    selectedSources: [],
-    pivotConfiguration: null,
-    pivotResult: null
-  })
-}));
+      clearPivotData: () => set({ 
+        relationships: [], 
+        joinStrategies: [], 
+        currentPivotResult: null,
+        selectedSources: [],
+        pivotConfiguration: null,
+        pivotResult: null,
+        pivotTables: [],
+        currentPreset: null
+      })
+    }),
+    {
+      name: 'pivot-store', // unique name for localStorage key
+      partialize: (state) => ({
+        // Persist only the important data, exclude temporary states
+        selectedSources: state.selectedSources,
+        relationships: state.relationships,
+        pivotTables: state.pivotTables,
+        currentPreset: state.currentPreset,
+        pivotHistory: state.pivotHistory,
+        pivotConfiguration: state.pivotConfiguration
+      })
+    }
+  )
+);
 
 // Export Store for export job management
 interface ExportStore {

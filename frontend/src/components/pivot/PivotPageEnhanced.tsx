@@ -13,7 +13,7 @@ import { DataSourceSelector } from './DataSourceSelector';
 import { PivotTableManager } from './PivotTableManager';
 import { ExcelFilePreview } from './ExcelFilePreview';
 import { LabelManager } from '../labels/LabelManager';
-import { useAppStore, useNotificationStore } from '../../stores/appStore';
+import { useAppStore, useNotificationStore, usePivotStore } from '../../stores/appStore';
 import { 
   DataSource, 
   DataRelationship, 
@@ -40,12 +40,23 @@ type ViewMode = 'data_sources' | 'pivot_tables' | 'excel_preview' | 'labels';
 export const PivotPageEnhanced: React.FC = () => {
   const { dataSources, loading, setLoading } = useAppStore();
   const { addNotification } = useNotificationStore();
+  const { 
+    selectedSources,
+    relationships,
+    pivotHistory,
+    currentPivotResult,
+    currentPreset,
+    pivotTables,
+    setSelectedSources,
+    setRelationships,
+    addToPivotHistory,
+    setCurrentPivotResult,
+    setCurrentPreset,
+    setPivotTables
+  } = usePivotStore();
   
   // State
-  const [selectedSources, setSelectedSources] = useState<string[]>([]);
-  const [relationships, setRelationships] = useState<DataRelationship[]>([]);
   const [detectingRelationships, setDetectingRelationships] = useState(false);
-  const [currentPreset, setCurrentPreset] = useState<PivotPreset | null>(null);
   const [presets, setPresets] = useState<PivotPreset[]>([]);
   const [excelPreview, setExcelPreview] = useState<ExcelPreviewType | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('data_sources');
@@ -54,6 +65,38 @@ export const PivotPageEnhanced: React.FC = () => {
   useEffect(() => {
     loadPresets();
   }, []);
+
+  // Validate persisted state on component mount
+  useEffect(() => {
+    const validatePersistedState = () => {
+      if (pivotTables.some(table => !table || !table.id)) {
+        console.warn('Invalid pivot tables detected, filtering out invalid entries');
+        const validTables = pivotTables.filter(table => table && table.id);
+        setPivotTables(validTables);
+      }
+    };
+    validatePersistedState();
+  }, []);
+
+  // Clean up selectedSources to only contain valid data source IDs
+  useEffect(() => {
+    if (dataSources.length > 0 && selectedSources.length > 0) {
+      const validDataSourceIds = new Set(dataSources.map(ds => ds.id));
+      const validSelectedSources = selectedSources.filter(id => validDataSourceIds.has(id));
+      
+      // Remove duplicates while preserving order
+      const uniqueValidSources = [...new Set(validSelectedSources)];
+      
+      if (uniqueValidSources.length !== selectedSources.length) {
+        console.warn('Cleaning up selectedSources:', {
+          original: selectedSources,
+          cleaned: uniqueValidSources,
+          availableDataSources: Array.from(validDataSourceIds)
+        });
+        setSelectedSources(uniqueValidSources);
+      }
+    }
+  }, [dataSources, selectedSources, setSelectedSources]);
 
   const loadPresets = async () => {
     try {
@@ -67,11 +110,16 @@ export const PivotPageEnhanced: React.FC = () => {
   };
 
   const handleSourceToggle = (sourceId: string) => {
-    setSelectedSources(prev => 
-      prev.includes(sourceId) 
-        ? prev.filter(id => id !== sourceId)
-        : [...prev, sourceId]
-    );
+    const newSources = selectedSources.includes(sourceId) 
+      ? selectedSources.filter(id => id !== sourceId)
+      : [...selectedSources, sourceId];
+    
+    setSelectedSources(newSources);
+    
+    // Clear relationships when sources change
+    if (relationships.length > 0) {
+      setRelationships([]);
+    }
   };
 
   const handleDetectRelationships = async () => {
