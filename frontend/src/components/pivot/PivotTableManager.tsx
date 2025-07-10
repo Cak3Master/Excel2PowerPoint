@@ -29,15 +29,46 @@ export const PivotTableManager: React.FC<PivotTableManagerProps> = ({
   onPresetUpdate
 }) => {
   const { addNotification } = useNotificationStore();
-  const [pivotTables, setPivotTables] = useState<PivotTableDefinition[]>(preset?.pivot_tables || []);
+  const [pivotTables, setPivotTables] = useState<PivotTableDefinition[]>(() => {
+    try {
+      const tables = preset?.pivot_tables || [];
+      if (!Array.isArray(tables)) return [];
+      return tables.filter(table => {
+        try {
+          return table && typeof table === 'object' && table.id;
+        } catch {
+          return false;
+        }
+      });
+    } catch {
+      return [];
+    }
+  });
   const [activePivotIndex, setActivePivotIndex] = useState<number | null>(null);
   const [isConfiguring, setIsConfiguring] = useState(false);
   const [editingPivot, setEditingPivot] = useState<PivotTableDefinition | null>(null);
   const [generatingPreview, setGeneratingPreview] = useState(false);
 
   useEffect(() => {
-    if (preset) {
-      setPivotTables(preset.pivot_tables || []);
+    try {
+      if (preset) {
+        const tables = preset.pivot_tables || [];
+        if (!Array.isArray(tables)) {
+          setPivotTables([]);
+          return;
+        }
+        const validTables = tables.filter(table => {
+          try {
+            return table && typeof table === 'object' && table.id;
+          } catch {
+            return false;
+          }
+        });
+        setPivotTables(validTables);
+      }
+    } catch (error) {
+      console.error('Error updating pivot tables from preset:', error);
+      setPivotTables([]);
     }
   }, [preset]);
 
@@ -59,7 +90,8 @@ export const PivotTableManager: React.FC<PivotTableManagerProps> = ({
       created_at: new Date().toISOString()
     };
 
-    setPivotTables([...pivotTables, newPivot]);
+    const updatedTables = [...(pivotTables || []), newPivot].filter(table => table && table.id);
+    setPivotTables(updatedTables);
     setEditingPivot(newPivot);
     setActivePivotIndex(pivotTables.length);
     setIsConfiguring(true);
@@ -73,7 +105,7 @@ export const PivotTableManager: React.FC<PivotTableManagerProps> = ({
 
   const deletePivotTable = (index: number) => {
     if (confirm('Are you sure you want to delete this pivot table?')) {
-      const newPivotTables = pivotTables.filter((_, i) => i !== index);
+      const newPivotTables = (pivotTables || []).filter((table, i) => table && table.id && i !== index);
       setPivotTables(newPivotTables);
       
       if (activePivotIndex === index) {
@@ -95,8 +127,9 @@ export const PivotTableManager: React.FC<PivotTableManagerProps> = ({
       created_at: new Date().toISOString()
     };
 
-    setPivotTables([...pivotTables, duplicatedPivot]);
-    updatePreset([...pivotTables, duplicatedPivot]);
+    const updatedTables = [...(pivotTables || []), duplicatedPivot].filter(table => table && table.id);
+    setPivotTables(updatedTables);
+    updatePreset(updatedTables);
   };
 
   const savePivotConfiguration = (configuration: any) => {
@@ -107,19 +140,20 @@ export const PivotTableManager: React.FC<PivotTableManagerProps> = ({
       configuration: configuration
     };
 
-    const newPivotTables = [...pivotTables];
+    const newPivotTables = [...(pivotTables || [])];
     if (activePivotIndex !== null) {
       newPivotTables[activePivotIndex] = updatedPivot;
     } else {
       newPivotTables.push(updatedPivot);
     }
 
-    setPivotTables(newPivotTables);
+    const validTables = newPivotTables.filter(table => table && table.id);
+    setPivotTables(validTables);
     setIsConfiguring(false);
     setEditingPivot(null);
     setActivePivotIndex(null);
     
-    updatePreset(newPivotTables);
+    updatePreset(validTables);
   };
 
   const updatePreset = (newPivotTables: PivotTableDefinition[]) => {
@@ -168,13 +202,24 @@ export const PivotTableManager: React.FC<PivotTableManagerProps> = ({
     }
   };
 
-  const hasConfiguration = (pivot: PivotTableDefinition) => {
-    if (!pivot.configuration) {
+  const hasConfiguration = (pivot: any) => {
+    try {
+      // Extremely defensive approach
+      if (!pivot) return false;
+      if (typeof pivot !== 'object') return false;
+      if (!pivot.configuration) return false;
+      if (typeof pivot.configuration !== 'object') return false;
+      
+      const config = pivot.configuration;
+      const rowFields = Array.isArray(config.row_fields) ? config.row_fields : [];
+      const columnFields = Array.isArray(config.column_fields) ? config.column_fields : [];
+      const valueFields = Array.isArray(config.value_fields) ? config.value_fields : [];
+      
+      return rowFields.length > 0 || columnFields.length > 0 || valueFields.length > 0;
+    } catch (error) {
+      console.error('Error in hasConfiguration:', error, pivot);
       return false;
     }
-    return (pivot.configuration.row_fields?.length || 0) > 0 || 
-           (pivot.configuration.column_fields?.length || 0) > 0 || 
-           (pivot.configuration.value_fields?.length || 0) > 0;
   };
 
   if (isConfiguring && editingPivot) {
@@ -212,6 +257,7 @@ export const PivotTableManager: React.FC<PivotTableManagerProps> = ({
         <PivotConfiguration
           dataSources={dataSources}
           selectedSources={selectedSources}
+          initialConfiguration={editingPivot.configuration}
           onConfigurationChange={savePivotConfiguration}
         />
       </div>
@@ -260,9 +306,31 @@ export const PivotTableManager: React.FC<PivotTableManagerProps> = ({
       </div>
 
       {/* Pivot Tables Grid */}
-      {pivotTables.length > 0 ? (
+      {Array.isArray(pivotTables) && pivotTables.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {pivotTables.map((pivot, index) => (
+          {pivotTables.filter(pivot => {
+            try {
+              // Extremely defensive filtering
+              if (!pivot) {
+                console.warn('Found null/undefined pivot table entry');
+                return false;
+              }
+              if (typeof pivot !== 'object') {
+                console.warn('Found non-object pivot table entry:', typeof pivot);
+                return false;
+              }
+              if (!pivot.id) {
+                console.warn('Found pivot table without ID:', pivot);
+                return false;
+              }
+              return true;
+            } catch (error) {
+              console.error('Error filtering pivot table:', error, pivot);
+              return false;
+            }
+          }).map((pivot, index) => {
+            try {
+              return (
             <div
               key={pivot.id}
               className="relative p-4 border border-gray-200 rounded-lg bg-white hover:shadow-md transition-shadow"
@@ -337,7 +405,12 @@ export const PivotTableManager: React.FC<PivotTableManagerProps> = ({
                 </div>
               </div>
             </div>
-          ))}
+              );
+            } catch (error) {
+              console.error('Error rendering pivot table:', error, pivot);
+              return null;
+            }
+          })}
         </div>
       ) : (
         <div className="text-center py-8 border-2 border-dashed border-gray-300 rounded-lg">

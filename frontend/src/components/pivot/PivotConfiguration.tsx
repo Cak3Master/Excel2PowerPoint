@@ -6,6 +6,11 @@ import { createPivotPreset } from '../../services/api';
 interface PivotConfigurationProps {
   dataSources: DataSource[];
   selectedSources: string[];
+  initialConfiguration?: {
+    row_fields?: PivotField[];
+    column_fields?: PivotField[];
+    value_fields?: PivotField[];
+  };
   onConfigurationChange: (config: {
     rowFields: PivotField[];
     columnFields: PivotField[];
@@ -16,25 +21,50 @@ interface PivotConfigurationProps {
 export const PivotConfiguration: React.FC<PivotConfigurationProps> = ({
   dataSources,
   selectedSources,
+  initialConfiguration,
   onConfigurationChange
 }) => {
-  const [rowFields, setRowFields] = useState<PivotField[]>([]);
-  const [columnFields, setColumnFields] = useState<PivotField[]>([]);
-  const [valueFields, setValueFields] = useState<PivotField[]>([]);
+  const [rowFields, setRowFields] = useState<PivotField[]>(initialConfiguration?.row_fields || []);
+  const [columnFields, setColumnFields] = useState<PivotField[]>(initialConfiguration?.column_fields || []);
+  const [valueFields, setValueFields] = useState<PivotField[]>(initialConfiguration?.value_fields || []);
   const [searchTerm, setSearchTerm] = useState('');
   const [fieldFilter, setFieldFilter] = useState<'all' | 'text' | 'number'>('all');
   const [presets, setPresets] = useState<PivotPreset[]>([]);
   const [showPresets, setShowPresets] = useState(false);
   const [presetName, setPresetName] = useState('');
+  const [dragTarget, setDragTarget] = useState<string | null>(null);
 
-  const availableColumns = selectedSources.flatMap(sourceId => {
-    const source = dataSources.find(ds => ds.id === sourceId);
-    return source?.metadata.columns.map(col => ({
-      sourceId,
-      sourceName: source.name,
-      columnName: col
-    })) || [];
-  });
+  const availableColumns = useMemo(() => {
+    console.log('PivotConfiguration Debug:', {
+      selectedSources,
+      dataSources: dataSources.map(ds => ({
+        id: ds.id,
+        name: ds.name,
+        columnCount: ds.metadata?.columns?.length || 0,
+        columns: ds.metadata?.columns || []
+      }))
+    });
+
+    return selectedSources.flatMap(sourceId => {
+      const source = dataSources.find(ds => ds.id === sourceId);
+      
+      if (!source) {
+        console.warn(`Data source with ID ${sourceId} not found`);
+        return [];
+      }
+      
+      if (!source.metadata || !source.metadata.columns || !Array.isArray(source.metadata.columns)) {
+        console.warn(`Data source ${source.name} has invalid or missing column metadata`, source.metadata);
+        return [];
+      }
+      
+      return source.metadata.columns.map(col => ({
+        sourceId,
+        sourceName: source.name,
+        columnName: col
+      }));
+    });
+  }, [selectedSources, dataSources]);
 
   const filteredColumns = useMemo(() => {
     let filtered = availableColumns;
@@ -69,11 +99,29 @@ export const PivotConfiguration: React.FC<PivotConfigurationProps> = ({
     return filtered;
   }, [availableColumns, searchTerm, fieldFilter]);
 
+  // Handle initial configuration changes
+  React.useEffect(() => {
+    if (initialConfiguration) {
+      setRowFields(initialConfiguration.row_fields || []);
+      setColumnFields(initialConfiguration.column_fields || []);
+      setValueFields(initialConfiguration.value_fields || []);
+    }
+  }, [initialConfiguration]);
+
   React.useEffect(() => {
     onConfigurationChange({ rowFields, columnFields, valueFields });
   }, [rowFields, columnFields, valueFields]);
 
   const addField = (sourceId: string, columnName: string, role: 'row' | 'column' | 'value') => {
+    // Check for duplicates
+    const allFields = [...rowFields, ...columnFields, ...valueFields];
+    const isDuplicate = allFields.some(f => f.source_id === sourceId && f.column_name === columnName);
+    
+    if (isDuplicate) {
+      console.warn(`Field ${columnName} from ${sourceId} is already added to the pivot table`);
+      return;
+    }
+
     const field: PivotField = {
       source_id: sourceId,
       column_name: columnName,
@@ -157,6 +205,21 @@ export const PivotConfiguration: React.FC<PivotConfigurationProps> = ({
   return (
     <div className="space-y-6">
       <h3 className="text-lg font-medium text-gray-900">Configure Pivot Table</h3>
+      
+      {/* Debug Information */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="bg-gray-100 border border-gray-300 rounded-lg p-3 text-xs">
+          <h4 className="font-semibold text-gray-700 mb-2">Debug Info:</h4>
+          <div className="space-y-1">
+            <div><strong>Selected Sources:</strong> {selectedSources.length} ({selectedSources.join(', ')})</div>
+            <div><strong>Available Data Sources:</strong> {dataSources.length}</div>
+            <div><strong>Available Columns:</strong> {availableColumns.length}</div>
+            {availableColumns.length === 0 && selectedSources.length > 0 && (
+              <div className="text-red-600"><strong>Warning:</strong> No columns found for selected sources</div>
+            )}
+          </div>
+        </div>
+      )}
       
       {/* Available Columns with Search */}
       <div className="bg-gray-50 rounded-lg p-4">
@@ -248,46 +311,96 @@ export const PivotConfiguration: React.FC<PivotConfigurationProps> = ({
           </div>
         )}
 
-        <div className="grid grid-cols-3 gap-2 max-h-60 overflow-y-auto">
-          {filteredColumns.map((col, index) => (
-            <div
-              key={`${col.sourceId}-${col.columnName}-${index}`}
-              className="group relative"
-            >
-              <div className="p-2 bg-white border border-gray-200 rounded text-sm">
-                <div className="font-medium truncate">{col.columnName}</div>
-                <div className="text-xs text-gray-500">{col.sourceName}</div>
-              </div>
+        {filteredColumns.length > 0 ? (
+          <div className="grid grid-cols-3 gap-2 max-h-60 overflow-y-auto">
+            {filteredColumns.map((col, index) => {
+              const allFields = [...rowFields, ...columnFields, ...valueFields];
+              const isUsed = allFields.some(f => f.source_id === col.sourceId && f.column_name === col.columnName);
               
-              {/* Quick Add Buttons */}
-              <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="flex space-x-1">
-                  <button
-                    onClick={() => addField(col.sourceId, col.columnName, 'row')}
-                    className="p-1 bg-blue-100 hover:bg-blue-200 rounded text-xs"
-                    title="Add to Rows"
-                  >
-                    R
-                  </button>
-                  <button
-                    onClick={() => addField(col.sourceId, col.columnName, 'column')}
-                    className="p-1 bg-green-100 hover:bg-green-200 rounded text-xs"
-                    title="Add to Columns"
-                  >
-                    C
-                  </button>
-                  <button
-                    onClick={() => addField(col.sourceId, col.columnName, 'value')}
-                    className="p-1 bg-yellow-100 hover:bg-yellow-200 rounded text-xs"
-                    title="Add to Values"
-                  >
-                    V
-                  </button>
+              return (
+              <div
+                key={`${col.sourceId}-${col.columnName}-${index}`}
+                className="group relative"
+                draggable={!isUsed}
+                onDragStart={(e) => {
+                  if (isUsed) {
+                    e.preventDefault();
+                    return;
+                  }
+                  e.dataTransfer.setData('application/json', JSON.stringify({
+                    sourceId: col.sourceId,
+                    columnName: col.columnName,
+                    sourceName: col.sourceName
+                  }));
+                }}
+              >
+                <div className={`p-2 border rounded text-sm transition-all ${
+                  isUsed 
+                    ? 'bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed' 
+                    : 'bg-white border-gray-200 cursor-move hover:shadow-md'
+                }`}>
+                  <div className="font-medium truncate flex items-center">
+                    {col.columnName}
+                    {isUsed && <span className="ml-1 text-xs">✓</span>}
+                  </div>
+                  <div className="text-xs text-gray-500">{col.sourceName}</div>
                 </div>
+                
+                {/* Quick Add Buttons */}
+                {!isUsed && (
+                  <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex space-x-1">
+                      <button
+                        onClick={() => addField(col.sourceId, col.columnName, 'row')}
+                        className="p-1 bg-blue-100 hover:bg-blue-200 rounded text-xs"
+                        title="Add to Rows"
+                      >
+                        R
+                      </button>
+                      <button
+                        onClick={() => addField(col.sourceId, col.columnName, 'column')}
+                        className="p-1 bg-green-100 hover:bg-green-200 rounded text-xs"
+                        title="Add to Columns"
+                      >
+                        C
+                      </button>
+                      <button
+                        onClick={() => addField(col.sourceId, col.columnName, 'value')}
+                        className="p-1 bg-yellow-100 hover:bg-yellow-200 rounded text-xs"
+                        title="Add to Values"
+                      >
+                        V
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-center py-8 border-2 border-dashed border-gray-300 rounded-lg bg-white">
+            <div className="text-gray-400 text-sm">
+              {selectedSources.length === 0 ? (
+                <div>
+                  <p className="font-medium">No data sources selected</p>
+                  <p className="mt-1">Select data sources from the previous step to see available columns</p>
+                </div>
+              ) : availableColumns.length === 0 ? (
+                <div>
+                  <p className="font-medium">No columns available</p>
+                  <p className="mt-1">The selected data sources don't have column metadata available</p>
+                  <p className="mt-1 text-xs">Check the debug info above for more details</p>
+                </div>
+              ) : (
+                <div>
+                  <p className="font-medium">No columns match your filters</p>
+                  <p className="mt-1">Try adjusting your search or filter settings</p>
+                </div>
+              )}
             </div>
-          ))}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Pivot Configuration Areas */}
@@ -295,13 +408,44 @@ export const PivotConfiguration: React.FC<PivotConfigurationProps> = ({
         {/* Row Fields */}
         <div className="space-y-3">
           <h4 className="text-sm font-medium text-gray-700">Row Fields</h4>
-          <div className="min-h-24 p-3 border-2 border-dashed border-blue-200 rounded-lg bg-blue-50">
+          <div 
+            className={`min-h-24 p-3 border-2 border-dashed rounded-lg transition-colors ${
+              dragTarget === 'row' 
+                ? 'border-blue-400 bg-blue-100' 
+                : 'border-blue-200 bg-blue-50'
+            }`}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragTarget(null);
+              try {
+                const data = JSON.parse(e.dataTransfer.getData('application/json'));
+                addField(data.sourceId, data.columnName, 'row');
+              } catch (error) {
+                console.error('Error parsing dropped data:', error);
+              }
+            }}
+            onDragOver={(e) => e.preventDefault()}
+            onDragEnter={(e) => {
+              e.preventDefault();
+              setDragTarget('row');
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              setDragTarget(null);
+            }}
+          >
             {rowFields.map((field, index) => (
-              <div key={index} className="flex items-center justify-between p-2 bg-white border rounded mb-2">
-                <span className="text-sm">{field.column_name}</span>
+              <div key={index} className="flex items-center justify-between p-2 bg-white border rounded mb-2 shadow-sm">
+                <div className="flex-1">
+                  <span className="text-sm font-medium">{field.column_name}</span>
+                  <div className="text-xs text-gray-500">
+                    {dataSources.find(ds => ds.id === field.source_id)?.name || field.source_id}
+                  </div>
+                </div>
                 <button
                   onClick={() => removeField('row', index)}
-                  className="text-red-500 hover:text-red-700"
+                  className="text-red-500 hover:text-red-700 p-1"
+                  title="Remove field"
                 >
                   <XMarkIcon className="h-4 w-4" />
                 </button>
@@ -309,7 +453,9 @@ export const PivotConfiguration: React.FC<PivotConfigurationProps> = ({
             ))}
             {rowFields.length === 0 && (
               <div className="text-center py-4 text-gray-500 text-sm">
-                Drag columns here or use quick add buttons
+                <div className="mb-2">📊 Row Fields</div>
+                <div>Drag columns here or use quick add buttons (R)</div>
+                <div className="text-xs mt-1">Rows group your data vertically</div>
               </div>
             )}
           </div>
@@ -318,13 +464,44 @@ export const PivotConfiguration: React.FC<PivotConfigurationProps> = ({
         {/* Column Fields */}
         <div className="space-y-3">
           <h4 className="text-sm font-medium text-gray-700">Column Fields</h4>
-          <div className="min-h-24 p-3 border-2 border-dashed border-green-200 rounded-lg bg-green-50">
+          <div 
+            className={`min-h-24 p-3 border-2 border-dashed rounded-lg transition-colors ${
+              dragTarget === 'column' 
+                ? 'border-green-400 bg-green-100' 
+                : 'border-green-200 bg-green-50'
+            }`}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragTarget(null);
+              try {
+                const data = JSON.parse(e.dataTransfer.getData('application/json'));
+                addField(data.sourceId, data.columnName, 'column');
+              } catch (error) {
+                console.error('Error parsing dropped data:', error);
+              }
+            }}
+            onDragOver={(e) => e.preventDefault()}
+            onDragEnter={(e) => {
+              e.preventDefault();
+              setDragTarget('column');
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              setDragTarget(null);
+            }}
+          >
             {columnFields.map((field, index) => (
-              <div key={index} className="flex items-center justify-between p-2 bg-white border rounded mb-2">
-                <span className="text-sm">{field.column_name}</span>
+              <div key={index} className="flex items-center justify-between p-2 bg-white border rounded mb-2 shadow-sm">
+                <div className="flex-1">
+                  <span className="text-sm font-medium">{field.column_name}</span>
+                  <div className="text-xs text-gray-500">
+                    {dataSources.find(ds => ds.id === field.source_id)?.name || field.source_id}
+                  </div>
+                </div>
                 <button
                   onClick={() => removeField('column', index)}
-                  className="text-red-500 hover:text-red-700"
+                  className="text-red-500 hover:text-red-700 p-1"
+                  title="Remove field"
                 >
                   <XMarkIcon className="h-4 w-4" />
                 </button>
@@ -332,7 +509,9 @@ export const PivotConfiguration: React.FC<PivotConfigurationProps> = ({
             ))}
             {columnFields.length === 0 && (
               <div className="text-center py-4 text-gray-500 text-sm">
-                Drag columns here or use quick add buttons
+                <div className="mb-2">📋 Column Fields</div>
+                <div>Drag columns here or use quick add buttons (C)</div>
+                <div className="text-xs mt-1">Columns group your data horizontally</div>
               </div>
             )}
           </div>
@@ -341,14 +520,45 @@ export const PivotConfiguration: React.FC<PivotConfigurationProps> = ({
         {/* Value Fields */}
         <div className="space-y-3">
           <h4 className="text-sm font-medium text-gray-700">Value Fields</h4>
-          <div className="min-h-24 p-3 border-2 border-dashed border-yellow-200 rounded-lg bg-yellow-50">
+          <div 
+            className={`min-h-24 p-3 border-2 border-dashed rounded-lg transition-colors ${
+              dragTarget === 'value' 
+                ? 'border-yellow-400 bg-yellow-100' 
+                : 'border-yellow-200 bg-yellow-50'
+            }`}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragTarget(null);
+              try {
+                const data = JSON.parse(e.dataTransfer.getData('application/json'));
+                addField(data.sourceId, data.columnName, 'value');
+              } catch (error) {
+                console.error('Error parsing dropped data:', error);
+              }
+            }}
+            onDragOver={(e) => e.preventDefault()}
+            onDragEnter={(e) => {
+              e.preventDefault();
+              setDragTarget('value');
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              setDragTarget(null);
+            }}
+          >
             {valueFields.map((field, index) => (
-              <div key={index} className="space-y-2 p-2 bg-white border rounded mb-2">
+              <div key={index} className="space-y-2 p-2 bg-white border rounded mb-2 shadow-sm">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm">{field.column_name}</span>
+                  <div className="flex-1">
+                    <span className="text-sm font-medium">{field.column_name}</span>
+                    <div className="text-xs text-gray-500">
+                      {dataSources.find(ds => ds.id === field.source_id)?.name || field.source_id}
+                    </div>
+                  </div>
                   <button
                     onClick={() => removeField('value', index)}
-                    className="text-red-500 hover:text-red-700"
+                    className="text-red-500 hover:text-red-700 p-1"
+                    title="Remove field"
                   >
                     <XMarkIcon className="h-4 w-4" />
                   </button>
@@ -360,7 +570,7 @@ export const PivotConfiguration: React.FC<PivotConfigurationProps> = ({
                     newFields[index].aggregation = e.target.value as any;
                     setValueFields(newFields);
                   }}
-                  className="w-full text-xs border border-gray-300 rounded px-2 py-1"
+                  className="w-full text-xs border border-gray-300 rounded px-2 py-1 bg-white"
                 >
                   <option value="sum">Sum</option>
                   <option value="count">Count</option>
@@ -372,7 +582,9 @@ export const PivotConfiguration: React.FC<PivotConfigurationProps> = ({
             ))}
             {valueFields.length === 0 && (
               <div className="text-center py-4 text-gray-500 text-sm">
-                Drag numeric columns here
+                <div className="mb-2">🔢 Value Fields</div>
+                <div>Drag columns here or use quick add buttons (V)</div>
+                <div className="text-xs mt-1">Values are the numeric data to calculate</div>
               </div>
             )}
           </div>
