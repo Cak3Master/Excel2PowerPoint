@@ -4,10 +4,13 @@ import { PlusIcon, XMarkIcon, DocumentIcon, TableCellsIcon, TagIcon, SparklesIco
 import { v4 as uuidv4 } from 'uuid';
 import { DataSource, DataUpload, AgentResponse, DataSourceLabel, LabelSuggestion } from '../../types';
 import { uploadDataSource, getLabels, suggestLabels, assignLabelToSource } from '../../services/api';
+import { LabelsList } from '../common/LabelsList';
+import { LabelBadge } from '../common/LabelBadge';
 
 interface MultiSourceUploadProps {
   dataSources: DataSource[];
   onDataSourceAdded: (dataSource: DataSource) => void;
+  onDataSourceUpdated?: (dataSource: DataSource) => void;
   onDataSourceRemoved: (sourceId: string) => void;
   maxSources?: number;
   allowedTypes?: string[];
@@ -16,6 +19,7 @@ interface MultiSourceUploadProps {
 export const MultiSourceUpload: React.FC<MultiSourceUploadProps> = ({
   dataSources = [],
   onDataSourceAdded,
+  onDataSourceUpdated,
   onDataSourceRemoved,
   maxSources = 5,
   allowedTypes = ['.xlsx', '.csv', '.json']
@@ -30,6 +34,21 @@ export const MultiSourceUpload: React.FC<MultiSourceUploadProps> = ({
   useEffect(() => {
     loadLabels();
   }, []);
+
+  // Debug duplicates
+  useEffect(() => {
+    const ids = dataSources.map(ds => ds.id);
+    const uniqueIds = new Set(ids);
+    if (ids.length !== uniqueIds.size) {
+      console.error('DUPLICATE DATA SOURCES DETECTED:', {
+        total: ids.length,
+        unique: uniqueIds.size,
+        ids: ids,
+        duplicates: ids.filter((id, index) => ids.indexOf(id) !== index),
+        dataSources: dataSources.map(ds => ({ id: ds.id, name: ds.name, label_assignments: ds.label_assignments?.length || 0 }))
+      });
+    }
+  }, [dataSources]);
 
   const loadLabels = async () => {
     try {
@@ -66,6 +85,16 @@ export const MultiSourceUpload: React.FC<MultiSourceUploadProps> = ({
       const dataSource = dataSources.find(ds => ds.id === dataSourceId);
       if (!dataSource) return;
 
+      // Check if label is already assigned
+      const isAlreadyAssigned = dataSource.label_assignments?.some(
+        assignment => assignment.label_id === labelId
+      );
+      
+      if (isAlreadyAssigned) {
+        alert('This label is already assigned to this data source.');
+        return;
+      }
+
       const label = labels.find(l => l.id === labelId);
       if (!label) return;
 
@@ -92,7 +121,13 @@ export const MultiSourceUpload: React.FC<MultiSourceUploadProps> = ({
           ...dataSource,
           label_assignments: [...(dataSource.label_assignments || []), response.data]
         };
-        onDataSourceAdded(updatedDataSource);
+        
+        // Use update mechanism if available, otherwise use add (which handles updates)
+        if (onDataSourceUpdated) {
+          onDataSourceUpdated(updatedDataSource);
+        } else {
+          onDataSourceAdded(updatedDataSource);
+        }
         
         setShowLabelDialog(null);
       } else {
@@ -103,6 +138,31 @@ export const MultiSourceUpload: React.FC<MultiSourceUploadProps> = ({
       alert('Failed to assign label. Please try again.');
     } finally {
       setAssigningLabel(null);
+    }
+  };
+
+  const handleRemoveLabel = async (dataSourceId: string, labelAssignmentId: string) => {
+    try {
+      const dataSource = dataSources.find(ds => ds.id === dataSourceId);
+      if (!dataSource) return;
+
+      // Remove the label assignment from the data source
+      const updatedDataSource: DataSource = {
+        ...dataSource,
+        label_assignments: dataSource.label_assignments?.filter(
+          assignment => assignment.id !== labelAssignmentId
+        ) || []
+      };
+      
+      // Use update mechanism if available, otherwise use add (which handles updates)
+      if (onDataSourceUpdated) {
+        onDataSourceUpdated(updatedDataSource);
+      } else {
+        onDataSourceAdded(updatedDataSource);
+      }
+    } catch (error) {
+      console.error('Failed to remove label:', error);
+      alert('Failed to remove label. Please try again.');
     }
   };
 
@@ -221,14 +281,14 @@ export const MultiSourceUpload: React.FC<MultiSourceUploadProps> = ({
           </h3>
           
           <div className="space-y-2">
-            {dataSources.map((source) => (
+            {Array.from(new Map(dataSources.map(source => [source.id, source])).values()).map((source) => (
               <div
                 key={source.id}
                 className="flex items-center justify-between p-4 border border-gray-200 rounded-lg bg-white"
               >
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center space-x-3 flex-1">
                   {getFileIcon(source.type)}
-                  <div>
+                  <div className="flex-1">
                     <h4 className="text-sm font-medium text-gray-900">
                       {source.name}
                     </h4>
@@ -238,6 +298,21 @@ export const MultiSourceUpload: React.FC<MultiSourceUploadProps> = ({
                         <> • {formatFileSize(source.metadata.file_size)}</>
                       )}
                     </p>
+                    
+                    {/* Show assigned labels */}
+                    {source.label_assignments && source.label_assignments.length > 0 && (
+                      <div className="mt-2">
+                        <LabelsList
+                          labelAssignments={source.label_assignments}
+                          labels={labels}
+                          size="small"
+                          maxVisible={4}
+                          removable={true}
+                          onRemove={(assignmentId) => handleRemoveLabel(source.id, assignmentId)}
+                          emptyMessage=""
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
                 
@@ -257,7 +332,10 @@ export const MultiSourceUpload: React.FC<MultiSourceUploadProps> = ({
                     className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100"
                   >
                     <TagIcon className="h-3 w-3 mr-1" />
-                    {source.label_assignments?.length ? `${source.label_assignments.length} label${source.label_assignments.length > 1 ? 's' : ''}` : 'Add Label'}
+                    {source.label_assignments?.length 
+                      ? 'Manage Labels' 
+                      : 'Add Label'
+                    }
                   </button>
 
                   <button
@@ -312,8 +390,37 @@ export const MultiSourceUpload: React.FC<MultiSourceUploadProps> = ({
           <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <h3 className="text-lg font-medium text-gray-900 mb-4">
-                Assign Label to Data Source
+                Manage Labels for Data Source
               </h3>
+              
+              {/* Currently Assigned Labels */}
+              {(() => {
+                const currentSource = dataSources.find(ds => ds.id === showLabelDialog);
+                const assignedLabels = currentSource?.label_assignments || [];
+                
+                if (assignedLabels.length > 0) {
+                  return (
+                    <div className="mb-4">
+                      <div className="flex items-center mb-2">
+                        <TagIcon className="h-4 w-4 text-green-500 mr-1" />
+                        <span className="text-sm font-medium text-gray-700">Currently Assigned</span>
+                      </div>
+                      <div className="p-3 bg-green-50 rounded-md">
+                        <LabelsList
+                          labelAssignments={assignedLabels}
+                          labels={labels}
+                          size="medium"
+                          maxVisible={10}
+                          removable={true}
+                          onRemove={(assignmentId) => handleRemoveLabel(showLabelDialog!, assignmentId)}
+                          emptyMessage=""
+                        />
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
               
               {/* Label Suggestions */}
               {labelSuggestions[showLabelDialog] && labelSuggestions[showLabelDialog].length > 0 && (
@@ -323,37 +430,60 @@ export const MultiSourceUpload: React.FC<MultiSourceUploadProps> = ({
                     <span className="text-sm font-medium text-gray-700">Suggestions</span>
                   </div>
                   <div className="space-y-2">
-                    {labelSuggestions[showLabelDialog].map((suggestion) => (
-                      <div
-                        key={suggestion.label_id}
-                        className="flex items-center justify-between p-2 border border-gray-200 rounded-md hover:bg-gray-50"
-                      >
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-2">
-                            <div 
-                              className="w-3 h-3 rounded-full border border-gray-300"
-                              style={{ backgroundColor: labels.find(l => l.id === suggestion.label_id)?.color }}
-                            />
-                            <span className="text-sm font-medium text-gray-900">
-                              {suggestion.label_name}
-                            </span>
-                            <span className="text-xs text-gray-500">
-                              {Math.round(suggestion.confidence * 100)}% match
-                            </span>
-                          </div>
-                          <div className="text-xs text-gray-500 mt-1">
-                            {suggestion.matching_columns.length} matching columns
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => handleAssignLabel(showLabelDialog, suggestion.label_id)}
-                          disabled={assigningLabel === suggestion.label_id}
-                          className="ml-2 px-3 py-1 text-xs font-medium text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100 disabled:opacity-50"
+                    {labelSuggestions[showLabelDialog].map((suggestion) => {
+                      const currentSource = dataSources.find(ds => ds.id === showLabelDialog);
+                      const isAlreadyAssigned = currentSource?.label_assignments?.some(
+                        assignment => assignment.label_id === suggestion.label_id
+                      );
+                      
+                      return (
+                        <div
+                          key={suggestion.label_id}
+                          className={`flex items-center justify-between p-2 border border-gray-200 rounded-md ${
+                            isAlreadyAssigned ? 'bg-gray-50 opacity-60' : 'hover:bg-gray-50'
+                          }`}
                         >
-                          {assigningLabel === suggestion.label_id ? 'Assigning...' : 'Assign'}
-                        </button>
-                      </div>
-                    ))}
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2">
+                              {(() => {
+                                const label = labels.find(l => l.id === suggestion.label_id);
+                                return label ? (
+                                  <LabelBadge
+                                    label={label}
+                                    size="small"
+                                  />
+                                ) : (
+                                  <span className="text-sm font-medium text-gray-900">
+                                    {suggestion.label_name}
+                                  </span>
+                                );
+                              })()}
+                              <span className="text-xs text-gray-500">
+                                {Math.round(suggestion.confidence * 100)}% match
+                              </span>
+                              {isAlreadyAssigned && (
+                                <span className="text-xs text-green-600 font-medium">✓ Assigned</span>
+                              )}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              {suggestion.matching_columns.length} matching columns
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleAssignLabel(showLabelDialog, suggestion.label_id)}
+                            disabled={assigningLabel === suggestion.label_id || isAlreadyAssigned}
+                            className="ml-2 px-3 py-1 text-xs font-medium text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {assigningLabel === suggestion.label_id 
+                              ? 'Assigning...' 
+                              : isAlreadyAssigned 
+                                ? 'Assigned' 
+                                : 'Assign'
+                            }
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -362,34 +492,48 @@ export const MultiSourceUpload: React.FC<MultiSourceUploadProps> = ({
               <div className="mb-4">
                 <span className="text-sm font-medium text-gray-700 mb-2 block">All Labels</span>
                 <div className="max-h-60 overflow-y-auto space-y-2">
-                  {labels.map((label) => (
-                    <div
-                      key={label.id}
-                      className="flex items-center justify-between p-2 border border-gray-200 rounded-md hover:bg-gray-50"
-                    >
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2">
-                          <div 
-                            className="w-3 h-3 rounded-full border border-gray-300"
-                            style={{ backgroundColor: label.color }}
-                          />
-                          <span className="text-sm font-medium text-gray-900">
-                            {label.name}
-                          </span>
-                        </div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          {label.expected_columns.length} expected columns
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => handleAssignLabel(showLabelDialog, label.id)}
-                        disabled={assigningLabel === label.id}
-                        className="ml-2 px-3 py-1 text-xs font-medium text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100 disabled:opacity-50"
+                  {labels.map((label) => {
+                    const currentSource = dataSources.find(ds => ds.id === showLabelDialog);
+                    const isAlreadyAssigned = currentSource?.label_assignments?.some(
+                      assignment => assignment.label_id === label.id
+                    );
+                    
+                    return (
+                      <div
+                        key={label.id}
+                        className={`flex items-center justify-between p-2 border border-gray-200 rounded-md ${
+                          isAlreadyAssigned ? 'bg-gray-50 opacity-60' : 'hover:bg-gray-50'
+                        }`}
                       >
-                        {assigningLabel === label.id ? 'Assigning...' : 'Assign'}
-                      </button>
-                    </div>
-                  ))}
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2">
+                            <LabelBadge
+                              label={label}
+                              size="small"
+                            />
+                            {isAlreadyAssigned && (
+                              <span className="text-xs text-green-600 font-medium">✓ Assigned</span>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {label.expected_columns.length} expected columns
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleAssignLabel(showLabelDialog, label.id)}
+                          disabled={assigningLabel === label.id || isAlreadyAssigned}
+                          className="ml-2 px-3 py-1 text-xs font-medium text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {assigningLabel === label.id 
+                            ? 'Assigning...' 
+                            : isAlreadyAssigned 
+                              ? 'Assigned' 
+                              : 'Assign'
+                          }
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 

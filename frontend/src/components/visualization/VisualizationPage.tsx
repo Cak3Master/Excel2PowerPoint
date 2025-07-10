@@ -5,17 +5,20 @@ import {
   analyzeDataForVisualization,
   configureVisualization,
   previewChart,
-  exportChart
+  exportChart,
+  getLabels
 } from '../../services/api';
 import { 
   ChartRecommendation, 
   ChartConfiguration as ChartConfig,
   DataAnalysisResult,
-  AgentResponse 
+  AgentResponse,
+  DataSourceLabel 
 } from '../../types';
 import { ChartRecommendations } from './ChartRecommendations';
 import { ChartConfiguration } from './ChartConfiguration';
 import { ChartPreview } from './ChartPreview';
+import { LabelsList } from '../common/LabelsList';
 
 export const VisualizationPage: React.FC = () => {
   const { dataSources, activeDataSource, loading, setLoading, setError } = useAppStore();
@@ -28,14 +31,30 @@ export const VisualizationPage: React.FC = () => {
   const [chartConfig, setChartConfig] = useState<ChartConfig | null>(null);
   const [chartId, setChartId] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string>('');
+  const [labels, setLabels] = useState<DataSourceLabel[]>([]);
 
   const activeData = dataSources.find(ds => ds.id === activeDataSource);
+
+  useEffect(() => {
+    loadLabels();
+  }, []);
 
   useEffect(() => {
     if (activeDataSource && step === 'select') {
       analyzeData();
     }
   }, [activeDataSource]);
+
+  const loadLabels = async () => {
+    try {
+      const response = await getLabels();
+      if (response.success && response.data) {
+        setLabels(response.data.labels);
+      }
+    } catch (error) {
+      console.error('Failed to load labels:', error);
+    }
+  };
 
   const analyzeData = async () => {
     if (!activeDataSource) return;
@@ -194,6 +213,21 @@ export const VisualizationPage: React.FC = () => {
               <p className="text-sm text-gray-500 mt-1">
                 {dataSource.metadata.row_count.toLocaleString()} rows × {dataSource.metadata.column_count} columns
               </p>
+              
+              {/* Labels */}
+              {dataSource.label_assignments && dataSource.label_assignments.length > 0 && (
+                <div className="mt-2">
+                  <LabelsList
+                    labelAssignments={dataSource.label_assignments}
+                    labels={labels}
+                    size="small"
+                    maxVisible={2}
+                    removable={false}
+                    emptyMessage=""
+                  />
+                </div>
+              )}
+              
               <div className="mt-2">
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                   {dataSource.type.toUpperCase()}
@@ -212,9 +246,21 @@ export const VisualizationPage: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Data Visualization</h2>
-          <p className="text-sm text-gray-500 mt-1">
-            Analyzing: <span className="font-medium">{activeData?.name}</span>
-          </p>
+          <div className="flex items-center gap-3 mt-1">
+            <p className="text-sm text-gray-500">
+              Analyzing: <span className="font-medium">{activeData?.name}</span>
+            </p>
+            {activeData?.label_assignments && activeData.label_assignments.length > 0 && (
+              <LabelsList
+                labelAssignments={activeData.label_assignments}
+                labels={labels}
+                size="small"
+                maxVisible={3}
+                removable={false}
+                emptyMessage=""
+              />
+            )}
+          </div>
         </div>
         
         {/* Step Navigation */}

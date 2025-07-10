@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeftIcon, ChevronRightIcon, EyeIcon, TableCellsIcon } from '@heroicons/react/24/outline';
-import { DataSource, AgentResponse } from '../../types';
-import { getDataSourcePreview } from '../../services/api';
+import { DataSource, AgentResponse, DataSourceLabel } from '../../types';
+import { getDataSourcePreview, getLabels } from '../../services/api';
+import { LabelsList } from '../common/LabelsList';
 
 interface DataSourcePreviewProps {
   dataSource: DataSource;
@@ -33,10 +34,23 @@ export const DataSourcePreview: React.FC<DataSourcePreviewProps> = ({
   const [error, setError] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(0);
   const [showDataTypes, setShowDataTypes] = useState(false);
+  const [labels, setLabels] = useState<DataSourceLabel[]>([]);
 
   useEffect(() => {
     loadPreview();
+    loadLabels();
   }, [dataSource.id]);
+
+  const loadLabels = async () => {
+    try {
+      const response = await getLabels();
+      if (response.success && response.data) {
+        setLabels(response.data.labels);
+      }
+    } catch (error) {
+      console.error('Failed to load labels:', error);
+    }
+  };
 
   const loadPreview = async () => {
     setLoading(true);
@@ -156,6 +170,19 @@ export const DataSourcePreview: React.FC<DataSourcePreviewProps> = ({
           <span className="text-sm text-gray-500">
             ({previewData.preview.length} of {previewData.total_rows.toLocaleString()} rows)
           </span>
+          {/* Show labels */}
+          {dataSource.label_assignments && dataSource.label_assignments.length > 0 && (
+            <div className="ml-4">
+              <LabelsList
+                labelAssignments={dataSource.label_assignments}
+                labels={labels}
+                size="small"
+                maxVisible={2}
+                removable={false}
+                emptyMessage=""
+              />
+            </div>
+          )}
         </div>
         
         <div className="flex items-center space-x-2">

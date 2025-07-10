@@ -5,13 +5,15 @@ import {
   detectDataRelationships,
   configurePivotTable,
   generatePivotTable,
-  exportPivotTable
+  exportPivotTable,
+  getLabels
 } from '../../services/api';
 import { 
   DataRelationship, 
   PivotField, 
   PivotResult,
-  AgentResponse 
+  AgentResponse,
+  DataSourceLabel 
 } from '../../types';
 import { DataSourceSelector } from './DataSourceSelector';
 import { PivotConfiguration } from './PivotConfiguration';
@@ -35,6 +37,11 @@ export const PivotPage: React.FC = () => {
   const [detectingRelationships, setDetectingRelationships] = useState(false);
   const [generatingPivot, setGeneratingPivot] = useState(false);
   const [pivotId, setPivotId] = useState<string | null>(null);
+  const [labels, setLabels] = useState<DataSourceLabel[]>([]);
+
+  useEffect(() => {
+    loadLabels();
+  }, []);
 
   useEffect(() => {
     if (selectedSources.length > 0 && pivotConfiguration) {
@@ -43,6 +50,17 @@ export const PivotPage: React.FC = () => {
       setStep('select');
     }
   }, [selectedSources, pivotConfiguration]);
+
+  const loadLabels = async () => {
+    try {
+      const response = await getLabels();
+      if (response.success && response.data) {
+        setLabels(response.data.labels);
+      }
+    } catch (error) {
+      console.error('Failed to load labels:', error);
+    }
+  };
 
   const handleSourceToggle = (sourceId: string) => {
     const newSources = selectedSources.includes(sourceId)
@@ -297,6 +315,7 @@ export const PivotPage: React.FC = () => {
             dataSources={dataSources}
             selectedSources={selectedSources}
             relationships={relationships}
+            labels={labels}
             onSourceToggle={handleSourceToggle}
             onDetectRelationships={handleDetectRelationships}
             detectingRelationships={detectingRelationships}

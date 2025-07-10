@@ -6,12 +6,14 @@ import {
   ExclamationTriangleIcon,
   ArrowPathIcon
 } from '@heroicons/react/24/outline';
-import { DataSource, DataRelationship } from '../../types';
+import { DataSource, DataRelationship, DataSourceLabel } from '../../types';
+import { LabelsList } from '../common/LabelsList';
 
 interface DataSourceSelectorProps {
   dataSources: DataSource[];
   selectedSources: string[];
   relationships: DataRelationship[];
+  labels?: DataSourceLabel[];
   onSourceToggle: (sourceId: string) => void;
   onDetectRelationships: () => void;
   detectingRelationships?: boolean;
@@ -21,6 +23,7 @@ export const DataSourceSelector: React.FC<DataSourceSelectorProps> = ({
   dataSources,
   selectedSources,
   relationships,
+  labels = [],
   onSourceToggle,
   onDetectRelationships,
   detectingRelationships = false
@@ -114,6 +117,21 @@ export const DataSourceSelector: React.FC<DataSourceSelectorProps> = ({
                     </span>
                   )}
                 </div>
+
+                {/* Labels */}
+                {dataSource.label_assignments && dataSource.label_assignments.length > 0 && (
+                  <div className="mt-3">
+                    <p className="text-xs text-gray-500 mb-1">Labels:</p>
+                    <LabelsList
+                      labelAssignments={dataSource.label_assignments}
+                      labels={labels}
+                      size="small"
+                      maxVisible={3}
+                      removable={false}
+                      emptyMessage=""
+                    />
+                  </div>
+                )}
 
                 {/* Column Preview */}
                 <div className="mt-3">
