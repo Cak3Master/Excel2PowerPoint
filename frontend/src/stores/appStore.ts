@@ -170,11 +170,12 @@ interface PivotStore {
   setPivotTables: (tables: any[]) => void;
   setCurrentPreset: (preset: any | null) => void;
   clearPivotData: () => void;
+  cleanSelectedSources: (validDataSourceIds: Set<string>) => void;
 }
 
 export const usePivotStore = create<PivotStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       relationships: [],
       joinStrategies: [],
       pivotHistory: [],
@@ -193,7 +194,30 @@ export const usePivotStore = create<PivotStore>()(
       })),
 
       setCurrentPivotResult: (result) => set({ currentPivotResult: result }),
-      setSelectedSources: (sources) => set({ selectedSources: sources }),
+      setSelectedSources: (sources) => set((state) => {
+        // Deduplicate and filter valid sources
+        const uniqueSources = [...new Set(sources)];
+        
+        // Ensure sources are actually valid (defensive programming)
+        const validSources = uniqueSources.filter(id => 
+          typeof id === 'string' && id.trim().length > 0
+        );
+        
+        console.log('setSelectedSources called:', {
+          originalSources: sources,
+          uniqueSources,
+          validSources,
+          currentState: state.selectedSources,
+          duplicatesRemoved: sources.length - uniqueSources.length,
+          invalidRemoved: uniqueSources.length - validSources.length
+        });
+        
+        // Only update if the array actually changed
+        if (JSON.stringify(validSources) !== JSON.stringify(state.selectedSources)) {
+          return { selectedSources: validSources };
+        }
+        return state;
+      }),
       setPivotConfiguration: (config) => set({ pivotConfiguration: config }),
       setPivotResult: (result) => set({ pivotResult: result }),
       setPivotTables: (tables) => set({ pivotTables: tables }),
@@ -208,19 +232,42 @@ export const usePivotStore = create<PivotStore>()(
         pivotResult: null,
         pivotTables: [],
         currentPreset: null
+      }),
+
+      cleanSelectedSources: (validDataSourceIds) => set((state) => {
+        const validSelectedSources = state.selectedSources.filter(id => validDataSourceIds.has(id));
+        const uniqueValidSources = [...new Set(validSelectedSources)];
+        
+        if (uniqueValidSources.length !== state.selectedSources.length || 
+            !uniqueValidSources.every((id, index) => id === state.selectedSources[index])) {
+          console.log('cleanSelectedSources: Cleaning up selectedSources', {
+            original: state.selectedSources,
+            cleaned: uniqueValidSources,
+            validDataSourceIds: Array.from(validDataSourceIds)
+          });
+          return { selectedSources: uniqueValidSources };
+        }
+        return state;
       })
     }),
     {
       name: 'pivot-store', // unique name for localStorage key
       partialize: (state) => ({
         // Persist only the important data, exclude temporary states
-        selectedSources: state.selectedSources,
+        selectedSources: [...new Set(state.selectedSources)], // Always deduplicate before persisting
         relationships: state.relationships,
         pivotTables: state.pivotTables,
         currentPreset: state.currentPreset,
         pivotHistory: state.pivotHistory,
         pivotConfiguration: state.pivotConfiguration
-      })
+      }),
+      onRehydrateStorage: () => (state) => {
+        // Clean up selectedSources when rehydrating from storage
+        if (state && state.selectedSources) {
+          state.selectedSources = [...new Set(state.selectedSources)];
+          console.log('Rehydrated pivot store with cleaned selectedSources:', state.selectedSources);
+        }
+      }
     }
   )
 );

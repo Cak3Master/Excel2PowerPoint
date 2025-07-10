@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { XMarkIcon, MagnifyingGlassIcon, BookmarkIcon } from '@heroicons/react/24/outline';
 import { PivotField, DataSource, PivotPreset } from '../../types';
 import { createPivotPreset } from '../../services/api';
@@ -24,9 +24,10 @@ export const PivotConfiguration: React.FC<PivotConfigurationProps> = ({
   initialConfiguration,
   onConfigurationChange
 }) => {
-  const [rowFields, setRowFields] = useState<PivotField[]>(initialConfiguration?.row_fields || []);
-  const [columnFields, setColumnFields] = useState<PivotField[]>(initialConfiguration?.column_fields || []);
-  const [valueFields, setValueFields] = useState<PivotField[]>(initialConfiguration?.value_fields || []);
+  const [rowFields, setRowFields] = useState<PivotField[]>([]);
+  const [columnFields, setColumnFields] = useState<PivotField[]>([]);
+  const [valueFields, setValueFields] = useState<PivotField[]>([]);
+  const [isInitialized, setIsInitialized] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [fieldFilter, setFieldFilter] = useState<'all' | 'text' | 'number'>('all');
   const [presets, setPresets] = useState<PivotPreset[]>([]);
@@ -35,8 +36,13 @@ export const PivotConfiguration: React.FC<PivotConfigurationProps> = ({
   const [dragTarget, setDragTarget] = useState<string | null>(null);
 
   const availableColumns = useMemo(() => {
+    // Filter selectedSources to only include valid IDs that exist in dataSources
+    const validDataSourceIds = new Set(dataSources.map(ds => ds.id));
+    const validSelectedSources = [...new Set(selectedSources.filter(id => validDataSourceIds.has(id)))];
+    
     console.log('PivotConfiguration Debug:', {
-      selectedSources,
+      originalSelectedSources: selectedSources,
+      validSelectedSources,
       dataSources: dataSources.map(ds => ({
         id: ds.id,
         name: ds.name,
@@ -45,11 +51,11 @@ export const PivotConfiguration: React.FC<PivotConfigurationProps> = ({
       }))
     });
 
-    return selectedSources.flatMap(sourceId => {
+    return validSelectedSources.flatMap(sourceId => {
       const source = dataSources.find(ds => ds.id === sourceId);
       
       if (!source) {
-        console.warn(`Data source with ID ${sourceId} not found`);
+        console.warn(`Data source with ID ${sourceId} not found after filtering`);
         return [];
       }
       
@@ -101,16 +107,22 @@ export const PivotConfiguration: React.FC<PivotConfigurationProps> = ({
 
   // Handle initial configuration changes
   React.useEffect(() => {
-    if (initialConfiguration) {
+    if (initialConfiguration && !isInitialized) {
       setRowFields(initialConfiguration.row_fields || []);
       setColumnFields(initialConfiguration.column_fields || []);
       setValueFields(initialConfiguration.value_fields || []);
+      setIsInitialized(true);
     }
-  }, [initialConfiguration]);
+  }, [initialConfiguration, isInitialized]);
 
   React.useEffect(() => {
-    onConfigurationChange({ rowFields, columnFields, valueFields });
-  }, [rowFields, columnFields, valueFields]);
+    const currentConfig = { rowFields, columnFields, valueFields };
+    
+    // Only call if we're initialized and have fields
+    if (isInitialized && (rowFields.length > 0 || columnFields.length > 0 || valueFields.length > 0)) {
+      onConfigurationChange(currentConfig);
+    }
+  }, [rowFields, columnFields, valueFields, isInitialized]);
 
   const addField = (sourceId: string, columnName: string, role: 'row' | 'column' | 'value') => {
     // Check for duplicates

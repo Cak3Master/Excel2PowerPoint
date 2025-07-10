@@ -49,6 +49,18 @@ export const PivotTableManager: React.FC<PivotTableManagerProps> = ({
   const [editingPivot, setEditingPivot] = useState<PivotTableDefinition | null>(null);
   const [generatingPreview, setGeneratingPreview] = useState(false);
   const [pendingConfiguration, setPendingConfiguration] = useState<any>(null);
+  
+  // Create stable callback reference with debouncing
+  const stableConfigurationCallback = useCallback((config: any) => {
+    // Only update if we actually have fields configured
+    if ((config.rowFields?.length > 0) || (config.columnFields?.length > 0) || (config.valueFields?.length > 0)) {
+      setPendingConfiguration({
+        row_fields: config.rowFields,
+        column_fields: config.columnFields,
+        value_fields: config.valueFields
+      });
+    }
+  }, []);
 
   // Initialize pivot tables from preset when component loads or preset changes
   useEffect(() => {
@@ -408,14 +420,7 @@ export const PivotTableManager: React.FC<PivotTableManagerProps> = ({
           dataSources={dataSources}
           selectedSources={selectedSources}
           initialConfiguration={editingPivot.configuration}
-          onConfigurationChange={useCallback((config) => {
-            // Store the configuration in pending state instead of updating editingPivot directly
-            setPendingConfiguration({
-              row_fields: config.rowFields,
-              column_fields: config.columnFields,
-              value_fields: config.valueFields
-            });
-          }, [])}
+          onConfigurationChange={stableConfigurationCallback}
         />
       </div>
     );

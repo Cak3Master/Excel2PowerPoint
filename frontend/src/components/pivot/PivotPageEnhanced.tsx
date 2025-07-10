@@ -52,7 +52,8 @@ export const PivotPageEnhanced: React.FC = () => {
     addToPivotHistory,
     setCurrentPivotResult,
     setCurrentPreset,
-    setPivotTables
+    setPivotTables,
+    cleanSelectedSources
   } = usePivotStore();
   
   // State
@@ -80,23 +81,15 @@ export const PivotPageEnhanced: React.FC = () => {
 
   // Clean up selectedSources to only contain valid data source IDs
   useEffect(() => {
-    if (dataSources.length > 0 && selectedSources.length > 0) {
+    if (dataSources.length > 0) {
       const validDataSourceIds = new Set(dataSources.map(ds => ds.id));
-      const validSelectedSources = selectedSources.filter(id => validDataSourceIds.has(id));
-      
-      // Remove duplicates while preserving order
-      const uniqueValidSources = [...new Set(validSelectedSources)];
-      
-      if (uniqueValidSources.length !== selectedSources.length) {
-        console.warn('Cleaning up selectedSources:', {
-          original: selectedSources,
-          cleaned: uniqueValidSources,
-          availableDataSources: Array.from(validDataSourceIds)
-        });
-        setSelectedSources(uniqueValidSources);
-      }
+      cleanSelectedSources(validDataSourceIds);
+    } else if (selectedSources.length > 0) {
+      // No data sources available, clear selection
+      console.warn('No data sources available, clearing selectedSources');
+      setSelectedSources([]);
     }
-  }, [dataSources, selectedSources, setSelectedSources]);
+  }, [dataSources, cleanSelectedSources, setSelectedSources]); // Use cleanSelectedSources to prevent infinite loops
 
   const loadPresets = async () => {
     try {
@@ -110,9 +103,26 @@ export const PivotPageEnhanced: React.FC = () => {
   };
 
   const handleSourceToggle = (sourceId: string) => {
-    const newSources = selectedSources.includes(sourceId) 
-      ? selectedSources.filter(id => id !== sourceId)
-      : [...selectedSources, sourceId];
+    // Ensure we're working with valid data sources
+    const validDataSourceIds = new Set(dataSources.map(ds => ds.id));
+    
+    if (!validDataSourceIds.has(sourceId)) {
+      console.warn('Attempting to toggle invalid source ID:', sourceId);
+      return;
+    }
+    
+    // Clean current selection and toggle the source
+    const cleanedSelectedSources = [...new Set(selectedSources.filter(id => validDataSourceIds.has(id)))];
+    const newSources = cleanedSelectedSources.includes(sourceId) 
+      ? cleanedSelectedSources.filter(id => id !== sourceId)
+      : [...cleanedSelectedSources, sourceId];
+    
+    console.log('handleSourceToggle:', {
+      sourceId,
+      cleanedSelectedSources,
+      newSources,
+      validDataSourceIds: Array.from(validDataSourceIds)
+    });
     
     setSelectedSources(newSources);
     
@@ -374,6 +384,25 @@ export const PivotPageEnhanced: React.FC = () => {
             </div>
           )}
         </div>
+        
+        {/* Debug Info for Development */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="mt-3 pt-3 border-t border-gray-200">
+            <div className="flex items-center justify-between text-xs text-gray-500">
+              <div>
+                <strong>Debug:</strong> selectedSources = [{selectedSources.join(', ')}]
+              </div>
+              <div>
+                Available: [{dataSources.map(ds => ds.id).join(', ')}]
+              </div>
+            </div>
+            {selectedSources.length !== new Set(selectedSources).size && (
+              <div className="text-xs text-red-600 mt-1">
+                ⚠️ Duplicates detected in selectedSources!
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Main Content */}
