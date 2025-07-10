@@ -369,9 +369,8 @@ export const PresetEditor: React.FC<PresetEditorProps> = ({
                       onChange={(e) => setFormData(prev => ({
                         ...prev,
                         schedule: { 
-                          ...prev.schedule, 
+                          enabled: true,
                           frequency: e.target.value, 
-                          enabled: true, 
                           cron_expression: prev.schedule?.cron_expression || '0 9 * * 1',
                           timezone: prev.schedule?.timezone || 'UTC',
                           next_run: null 
@@ -397,9 +396,8 @@ export const PresetEditor: React.FC<PresetEditorProps> = ({
                       onChange={(e) => setFormData(prev => ({
                         ...prev,
                         schedule: { 
-                          ...prev.schedule, 
+                          enabled: true,
                           cron_expression: e.target.value, 
-                          enabled: true, 
                           frequency: prev.schedule?.frequency || 'daily',
                           timezone: prev.schedule?.timezone || 'UTC', 
                           next_run: null 
@@ -422,9 +420,8 @@ export const PresetEditor: React.FC<PresetEditorProps> = ({
                       onChange={(e) => setFormData(prev => ({
                         ...prev,
                         schedule: { 
-                          ...prev.schedule, 
+                          enabled: true,
                           timezone: e.target.value, 
-                          enabled: true, 
                           frequency: prev.schedule?.frequency || 'daily',
                           cron_expression: prev.schedule?.cron_expression || '0 9 * * 1', 
                           next_run: null 
