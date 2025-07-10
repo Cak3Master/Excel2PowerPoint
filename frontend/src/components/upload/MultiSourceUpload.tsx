@@ -20,11 +20,6 @@ export const MultiSourceUpload: React.FC<MultiSourceUploadProps> = ({
   maxSources = 5,
   allowedTypes = ['.xlsx', '.csv', '.json']
 }) => {
-  // Debug: Log if we receive duplicate data sources
-  const uniqueIds = new Set(dataSources.map(ds => ds.id));
-  if (uniqueIds.size !== dataSources.length) {
-    console.warn('MultiSourceUpload received duplicate data sources:', dataSources.map(ds => ds.id));
-  }
   const [uploading, setUploading] = useState<Set<string>>(new Set());
   const [uploadErrors, setUploadErrors] = useState<Record<string, string>>({});
   const [labels, setLabels] = useState<DataSourceLabel[]>([]);
@@ -97,9 +92,6 @@ export const MultiSourceUpload: React.FC<MultiSourceUploadProps> = ({
           ...dataSource,
           label_assignments: [...(dataSource.label_assignments || []), response.data]
         };
-        // Use the same update mechanism as the store to avoid duplicates
-        console.log('Updating data source with label:', dataSource.id);
-        console.log('Current dataSources:', dataSources.map(ds => ds.id));
         onDataSourceAdded(updatedDataSource);
         
         setShowLabelDialog(null);
@@ -225,11 +217,11 @@ export const MultiSourceUpload: React.FC<MultiSourceUploadProps> = ({
       {(dataSources?.length || 0) > 0 && (
         <div className="space-y-3">
           <h3 className="text-lg font-medium text-gray-900">
-            Data Sources ({Array.from(new Map((dataSources || []).map(source => [source.id, source])).values()).length}/{maxSources})
+            Data Sources ({dataSources?.length || 0}/{maxSources})
           </h3>
           
           <div className="space-y-2">
-            {Array.from(new Map((dataSources || []).filter(source => source && source.id).map(source => [source.id, source])).values()).map((source) => (
+            {dataSources.map((source) => (
               <div
                 key={source.id}
                 className="flex items-center justify-between p-4 border border-gray-200 rounded-lg bg-white"

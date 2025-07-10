@@ -60,9 +60,8 @@ function App() {
   
   // Multi-source upload handlers
   const handleDataSourceAdded = useCallback((dataSource: DataSource) => {
-    console.log('App: Adding/updating data source:', dataSource.id, 'Current sources:', dataSources.map(ds => ds.id));
     addDataSource(dataSource);
-  }, [addDataSource, dataSources]);
+  }, [addDataSource]);
   
   const handleDataSourceRemoved = useCallback((sourceId: string) => {
     removeDataSource(sourceId);
@@ -315,11 +314,10 @@ function App() {
         );
       default:
         return (
-          <MultiSourceUpload 
-            dataSources={dataSources}
-            onDataSourceAdded={handleDataSourceAdded}
-            onDataSourceRemoved={handleDataSourceRemoved}
-          />
+          <div className="text-center py-8">
+            <h2 className="text-2xl font-semibold text-gray-900">Welcome to Excel2PowerPoint</h2>
+            <p className="mt-2 text-gray-600">Please select an option from the sidebar to get started.</p>
+          </div>
         );
     }
   };
