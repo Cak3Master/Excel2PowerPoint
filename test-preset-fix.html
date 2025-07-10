@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Preset Fix</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-case {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .pass {
+            color: green;
+            font-weight: bold;
+        }
+        .fail {
+            color: red;
+            font-weight: bold;
+        }
+        pre {
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        h2 {
+            color: #333;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Preset Editor Fix Verification</h1>
+    
+    <div class="test-case">
+        <h2>Issue: Cannot read properties of null (reading 'frequency')</h2>
+        
+        <h3>Problem Found:</h3>
+        <pre>
+// Original problematic code (line 142):
+schedule: { ...scheduleData, frequency: (scheduleData as any).frequency || 'daily' }
+
+// When scheduleEnabled is false, scheduleData is null
+// Trying to access .frequency on null causes the error
+        </pre>
+        
+        <h3>Fix Applied:</h3>
+        <pre>
+// Fixed code:
+const scheduleData = scheduleEnabled ? {
+    enabled: true,
+    frequency: formData.schedule?.frequency || 'daily',  // Added frequency field
+    cron_expression: formData.schedule?.cron_expression || '0 9 * * 1',
+    timezone: formData.schedule?.timezone || 'UTC',
+    next_run: null
+} : null;
+
+onSave({
+    ...formData,
+    category: formData.type || 'custom',
+    preset_type: formData.type || 'workflow',
+    configuration: {},
+    workflow_steps: formData.steps || [],
+    schedule: scheduleData  // Now just pass scheduleData directly
+});
+        </pre>
+        
+        <h3>Additional Improvements:</h3>
+        <ul>
+            <li>Added frequency field to the schedule form UI</li>
+            <li>Fixed step type field to use agent_type property</li>
+            <li>Properly handle all schedule fields in onChange handlers</li>
+        </ul>
+        
+        <h3>Test Cases:</h3>
+        <div id="test-results"></div>
+    </div>
+
+    <script>
+        // Simulate the fixed handleSubmit logic
+        function testHandleSubmit(scheduleEnabled, formDataSchedule) {
+            try {
+                const scheduleData = scheduleEnabled ? {
+                    enabled: true,
+                    frequency: formDataSchedule?.frequency || 'daily',
+                    cron_expression: formDataSchedule?.cron_expression || '0 9 * * 1',
+                    timezone: formDataSchedule?.timezone || 'UTC',
+                    next_run: null
+                } : null;
+
+                const result = {
+                    schedule: scheduleData
+                };
+
+                return { success: true, result };
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
+        }
+
+        const testCases = [
+            {
+                name: "Schedule disabled",
+                scheduleEnabled: false,
+                formDataSchedule: null,
+                expected: null
+            },
+            {
+                name: "Schedule enabled with no previous data",
+                scheduleEnabled: true,
+                formDataSchedule: null,
+                expected: {
+                    enabled: true,
+                    frequency: 'daily',
+                    cron_expression: '0 9 * * 1',
+                    timezone: 'UTC',
+                    next_run: null
+                }
+            },
+            {
+                name: "Schedule enabled with existing data",
+                scheduleEnabled: true,
+                formDataSchedule: {
+                    frequency: 'weekly',
+                    cron_expression: '0 10 * * MON',
+                    timezone: 'America/New_York'
+                },
+                expected: {
+                    enabled: true,
+                    frequency: 'weekly',
+                    cron_expression: '0 10 * * MON',
+                    timezone: 'America/New_York',
+                    next_run: null
+                }
+            }
+        ];
+
+        const resultsDiv = document.getElementById('test-results');
+        
+        testCases.forEach((testCase, index) => {
+            const result = testHandleSubmit(testCase.scheduleEnabled, testCase.formDataSchedule);
+            const passed = result.success && 
+                JSON.stringify(result.result.schedule) === JSON.stringify(testCase.expected);
+            
+            const testResult = document.createElement('div');
+            testResult.innerHTML = `
+                <h4>Test ${index + 1}: ${testCase.name}</h4>
+                <p>Status: <span class="${passed ? 'pass' : 'fail'}">${passed ? 'PASSED' : 'FAILED'}</span></p>
+                <pre>Input: scheduleEnabled=${testCase.scheduleEnabled}, formDataSchedule=${JSON.stringify(testCase.formDataSchedule, null, 2)}</pre>
+                <pre>Expected: ${JSON.stringify(testCase.expected, null, 2)}</pre>
+                <pre>Actual: ${JSON.stringify(result.result?.schedule, null, 2)}</pre>
+                ${!passed ? `<pre>Error: ${result.error || 'Output mismatch'}</pre>` : ''}
+            `;
+            resultsDiv.appendChild(testResult);
+        });
+    </script>
+</body>
+</html>

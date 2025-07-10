@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Selected Sources</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .debug-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .log-entry {
+            background: #f8f9fa;
+            border-left: 4px solid #007bff;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        .error { border-left-color: #dc3545; }
+        .warn { border-left-color: #ffc107; }
+        .success { border-left-color: #28a745; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .clear-btn {
+            background: #dc3545;
+        }
+        .clear-btn:hover {
+            background: #c82333;
+        }
+    </style>
+</head>
+<body>
+    <h1>Debug Selected Sources Duplication</h1>
+    
+    <div class="debug-section">
+        <h3>Current localStorage State</h3>
+        <button onclick="showLocalStorage()">Show localStorage</button>
+        <button onclick="clearPivotStore()" class="clear-btn">Clear Pivot Store</button>
+        <div id="localStorage-content"></div>
+    </div>
+
+    <div class="debug-section">
+        <h3>Simulated Data Sources</h3>
+        <button onclick="simulateDataSources()">Simulate Data Sources</button>
+        <div id="data-sources-content"></div>
+    </div>
+
+    <div class="debug-section">
+        <h3>Console Logs</h3>
+        <button onclick="clearLogs()">Clear Logs</button>
+        <div id="console-logs"></div>
+    </div>
+
+    <script>
+        // Mock data sources
+        const mockDataSources = [
+            { id: 'ds1', name: 'Sales Data', metadata: { columns: ['Date', 'Product', 'Amount'] } },
+            { id: 'ds2', name: 'Customer Data', metadata: { columns: ['ID', 'Name', 'Email'] } },
+            { id: 'ds3', name: 'Product Data', metadata: { columns: ['SKU', 'Name', 'Price'] } }
+        ];
+
+        // Mock selected sources that might have duplicates
+        const mockSelectedSources = ['ds1', 'ds2', 'ds1', 'ds3', 'ds2', 'invalid-id', 'ds1'];
+
+        function addLog(message, type = 'info') {
+            const logsDiv = document.getElementById('console-logs');
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            logEntry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logsDiv.appendChild(logEntry);
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+        }
+
+        function showLocalStorage() {
+            const content = document.getElementById('localStorage-content');
+            const pivotStore = localStorage.getItem('pivot-store');
+            
+            if (pivotStore) {
+                try {
+                    const parsed = JSON.parse(pivotStore);
+                    content.innerHTML = `<pre>${JSON.stringify(parsed, null, 2)}</pre>`;
+                    addLog(`Found pivot-store in localStorage with selectedSources: ${JSON.stringify(parsed.state?.selectedSources || [])}`, 'info');
+                } catch (e) {
+                    content.innerHTML = `<div class="error">Error parsing localStorage: ${e.message}</div>`;
+                    addLog(`Error parsing localStorage: ${e.message}`, 'error');
+                }
+            } else {
+                content.innerHTML = '<div>No pivot-store found in localStorage</div>';
+                addLog('No pivot-store found in localStorage', 'info');
+            }
+        }
+
+        function clearPivotStore() {
+            localStorage.removeItem('pivot-store');
+            addLog('Cleared pivot-store from localStorage', 'success');
+            showLocalStorage();
+        }
+
+        function simulateDataSources() {
+            const content = document.getElementById('data-sources-content');
+            
+            // Simulate the deduplication logic
+            const validDataSourceIds = new Set(mockDataSources.map(ds => ds.id));
+            const validSelectedSources = mockSelectedSources.filter(id => validDataSourceIds.has(id));
+            const uniqueValidSources = [...new Set(validSelectedSources)];
+            
+            content.innerHTML = `
+                <h4>Mock Data Sources:</h4>
+                <pre>${JSON.stringify(mockDataSources, null, 2)}</pre>
+                
+                <h4>Mock Selected Sources (with duplicates):</h4>
+                <pre>${JSON.stringify(mockSelectedSources, null, 2)}</pre>
+                
+                <h4>Valid Data Source IDs:</h4>
+                <pre>${JSON.stringify(Array.from(validDataSourceIds), null, 2)}</pre>
+                
+                <h4>After Filtering Invalid IDs:</h4>
+                <pre>${JSON.stringify(validSelectedSources, null, 2)}</pre>
+                
+                <h4>After Deduplication:</h4>
+                <pre>${JSON.stringify(uniqueValidSources, null, 2)}</pre>
+            `;
+            
+            addLog(`Original selectedSources: ${mockSelectedSources.length} items`, 'info');
+            addLog(`After filtering invalid: ${validSelectedSources.length} items`, 'info');
+            addLog(`After deduplication: ${uniqueValidSources.length} items`, 'success');
+            
+            // Simulate the store update
+            const mockStoreState = {
+                state: {
+                    selectedSources: uniqueValidSources,
+                    relationships: [],
+                    pivotTables: [],
+                    currentPreset: null
+                }
+            };
+            
+            localStorage.setItem('pivot-store', JSON.stringify(mockStoreState));
+            addLog('Updated localStorage with cleaned selectedSources', 'success');
+        }
+
+        function clearLogs() {
+            document.getElementById('console-logs').innerHTML = '';
+        }
+
+        // Initialize
+        window.onload = function() {
+            showLocalStorage();
+            addLog('Debug page loaded', 'info');
+        };
+    </script>
+</body>
+</html>

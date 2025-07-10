@@ -632,14 +632,34 @@ export const getPivotPresetsByLabel = async (labelId: string): Promise<AgentResp
 };
 
 export const createPivotPreset = async (presetData: Partial<PivotPreset>): Promise<AgentResponse<PivotPreset>> => {
-  const response = await fetch(`${API_BASE_URL}/pivot-presets`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(presetData),
-  });
-  return response.json();
+  console.log('=== createPivotPreset API call ===');
+  console.log('presetData:', presetData);
+  console.log('URL:', `${API_BASE_URL}/pivot-presets`);
+  
+  try {
+    const response = await fetch(`${API_BASE_URL}/pivot-presets`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(presetData),
+    });
+    
+    console.log('Response status:', response.status);
+    console.log('Response ok:', response.ok);
+    
+    const data = await response.json();
+    console.log('Response data:', data);
+    
+    if (!response.ok) {
+      console.error('API error response:', data);
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('createPivotPreset error:', error);
+    throw error;
+  }
 };
 
 export const updatePivotPreset = async (presetId: string, presetData: Partial<PivotPreset>): Promise<AgentResponse<PivotPreset>> => {
@@ -661,14 +681,35 @@ export const deletePivotPreset = async (presetId: string): Promise<AgentResponse
 };
 
 export const generateExcelFromPreset = async (presetId: string, dataSourceIds: string[]): Promise<AgentResponse<ExcelFilePreview>> => {
-  const response = await fetch(`${API_BASE_URL}/pivot-presets/${presetId}/generate`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      data_source_ids: dataSourceIds
-    }),
-  });
-  return response.json();
+  console.log('=== generateExcelFromPreset API call ===');
+  console.log('presetId:', presetId);
+  console.log('dataSourceIds:', dataSourceIds);
+  console.log('URL:', `${API_BASE_URL}/pivot-presets/${presetId}/generate`);
+  
+  try {
+    const response = await fetch(`${API_BASE_URL}/pivot-presets/${presetId}/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        data_source_ids: dataSourceIds
+      }),
+    });
+    
+    console.log('Response status:', response.status);
+    console.log('Response ok:', response.ok);
+    
+    const data = await response.json();
+    console.log('Response data:', data);
+    
+    if (!response.ok) {
+      console.error('API error response:', data);
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('generateExcelFromPreset error:', error);
+    throw error;
+  }
 };

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Reset Application State</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        button { padding: 10px 20px; margin: 10px; font-size: 16px; }
+        .success { color: green; }
+        .warning { color: orange; }
+    </style>
+</head>
+<body>
+    <h1>Application State Reset Tool</h1>
+    
+    <button onclick="clearStorage()">Clear All Storage</button>
+    <button onclick="showStorage()">Show Current Storage</button>
+    
+    <div id="output"></div>
+    
+    <script>
+        function clearStorage() {
+            const output = document.getElementById('output');
+            
+            // Clear all storage
+            localStorage.clear();
+            sessionStorage.clear();
+            
+            // Also clear IndexedDB if used
+            if ('indexedDB' in window) {
+                indexedDB.deleteDatabase('keyval-store');
+                indexedDB.deleteDatabase('pivot-store');
+            }
+            
+            output.innerHTML = `
+                <h2 class="success">✅ Storage Cleared Successfully!</h2>
+                <p>• localStorage: cleared</p>
+                <p>• sessionStorage: cleared</p>
+                <p>• IndexedDB: cleared</p>
+                <p><strong>Next steps:</strong></p>
+                <ol>
+                    <li>Go back to your application (localhost:3000)</li>
+                    <li>Hard refresh (Ctrl+Shift+R or Cmd+Shift+R)</li>
+                    <li>Upload fresh Excel files</li>
+                    <li>Test pivot table creation</li>
+                </ol>
+            `;
+        }
+        
+        function showStorage() {
+            const output = document.getElementById('output');
+            
+            let localStorageContent = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                const value = localStorage.getItem(key);
+                localStorageContent.push(`${key}: ${value.substring(0, 100)}...`);
+            }
+            
+            output.innerHTML = `
+                <h2>Current Storage Contents:</h2>
+                <h3>localStorage (${localStorage.length} items):</h3>
+                <pre>${localStorageContent.join('\\n')}</pre>
+                <h3>sessionStorage (${sessionStorage.length} items):</h3>
+                <pre>${Object.keys(sessionStorage).join('\\n')}</pre>
+            `;
+        }
+        
+        // Auto-show storage on load
+        showStorage();
+    </script>
+</body>
+</html>

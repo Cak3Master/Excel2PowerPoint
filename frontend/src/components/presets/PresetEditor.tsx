@@ -128,6 +128,7 @@ export const PresetEditor: React.FC<PresetEditorProps> = ({
     
     const scheduleData = scheduleEnabled ? {
       enabled: true,
+      frequency: formData.schedule?.frequency || 'daily',
       cron_expression: formData.schedule?.cron_expression || '0 9 * * 1',
       timezone: formData.schedule?.timezone || 'UTC',
       next_run: null
@@ -139,7 +140,7 @@ export const PresetEditor: React.FC<PresetEditorProps> = ({
       preset_type: formData.type || 'workflow',
       configuration: {},
       workflow_steps: formData.steps || [],
-      schedule: { ...scheduleData, frequency: (scheduleData as any).frequency || 'daily' }
+      schedule: scheduleData
     } as any);
   };
 
@@ -290,8 +291,8 @@ export const PresetEditor: React.FC<PresetEditorProps> = ({
                           Type
                         </label>
                         <select
-                          value={step.type}
-                          onChange={(e) => updateStep(index, { type: e.target.value as PresetStep['type'] })}
+                          value={step.agent_type || step.type || 'visualization'}
+                          onChange={(e) => updateStep(index, { agent_type: e.target.value as PresetStep['agent_type'] })}
                           className="block w-full border border-gray-300 rounded text-sm px-2 py-1"
                         >
                           {stepTypes.map((type) => (
@@ -360,6 +361,33 @@ export const PresetEditor: React.FC<PresetEditorProps> = ({
                 <div className="space-y-3 pl-6 border-l-2 border-blue-200">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Frequency
+                    </label>
+                    <select
+                      value={formData.schedule?.frequency || 'daily'}
+                      onChange={(e) => setFormData(prev => ({
+                        ...prev,
+                        schedule: { 
+                          ...prev.schedule, 
+                          frequency: e.target.value, 
+                          enabled: true, 
+                          cron_expression: prev.schedule?.cron_expression || '0 9 * * 1',
+                          timezone: prev.schedule?.timezone || 'UTC',
+                          next_run: null 
+                        }
+                      }))}
+                      className="block w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                    >
+                      <option value="hourly">Hourly</option>
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                      <option value="monthly">Monthly</option>
+                      <option value="custom">Custom</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
                       Cron Expression
                     </label>
                     <input
@@ -367,7 +395,14 @@ export const PresetEditor: React.FC<PresetEditorProps> = ({
                       value={formData.schedule?.cron_expression || '0 9 * * 1'}
                       onChange={(e) => setFormData(prev => ({
                         ...prev,
-                        schedule: { ...prev.schedule, cron_expression: e.target.value, enabled: true, timezone: 'UTC', next_run: null }
+                        schedule: { 
+                          ...prev.schedule, 
+                          cron_expression: e.target.value, 
+                          enabled: true, 
+                          frequency: prev.schedule?.frequency || 'daily',
+                          timezone: prev.schedule?.timezone || 'UTC', 
+                          next_run: null 
+                        }
                       }))}
                       className="block w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
                       placeholder="0 9 * * 1"
@@ -385,7 +420,14 @@ export const PresetEditor: React.FC<PresetEditorProps> = ({
                       value={formData.schedule?.timezone || 'UTC'}
                       onChange={(e) => setFormData(prev => ({
                         ...prev,
-                        schedule: { ...prev.schedule, timezone: e.target.value, enabled: true, cron_expression: prev.schedule?.cron_expression || '0 9 * * 1', next_run: null }
+                        schedule: { 
+                          ...prev.schedule, 
+                          timezone: e.target.value, 
+                          enabled: true, 
+                          frequency: prev.schedule?.frequency || 'daily',
+                          cron_expression: prev.schedule?.cron_expression || '0 9 * * 1', 
+                          next_run: null 
+                        }
                       }))}
                       className="block w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
                     >

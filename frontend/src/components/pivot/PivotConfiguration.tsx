@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { XMarkIcon, MagnifyingGlassIcon, BookmarkIcon } from '@heroicons/react/24/outline';
-import { PivotField, DataSource, PivotPreset } from '../../types';
+import { PivotField, DataSource, PivotPreset, PivotTableDefinition } from '../../types';
 import { createPivotPreset } from '../../services/api';
 
 interface PivotConfigurationProps {
@@ -27,85 +27,66 @@ export const PivotConfiguration: React.FC<PivotConfigurationProps> = ({
   const [rowFields, setRowFields] = useState<PivotField[]>([]);
   const [columnFields, setColumnFields] = useState<PivotField[]>([]);
   const [valueFields, setValueFields] = useState<PivotField[]>([]);
-  const [isInitialized, setIsInitialized] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [fieldFilter, setFieldFilter] = useState<'all' | 'text' | 'number'>('all');
   const [presets, setPresets] = useState<PivotPreset[]>([]);
   const [showPresets, setShowPresets] = useState(false);
   const [presetName, setPresetName] = useState('');
   const [dragTarget, setDragTarget] = useState<string | null>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
 
+  // Safe data processing with comprehensive validation
   const availableColumns = useMemo(() => {
-    // Filter selectedSources to only include valid IDs that exist in dataSources
-    const validDataSourceIds = new Set(dataSources.map(ds => ds.id));
-    const validSelectedSources = [...new Set(selectedSources.filter(id => validDataSourceIds.has(id)))];
+    if (!Array.isArray(dataSources) || dataSources.length === 0) return [];
+    if (!Array.isArray(selectedSources) || selectedSources.length === 0) return [];
     
-    console.log('PivotConfiguration Debug:', {
-      originalSelectedSources: selectedSources,
-      validSelectedSources,
-      dataSources: dataSources.map(ds => ({
-        id: ds.id,
-        name: ds.name,
-        columnCount: ds.metadata?.columns?.length || 0,
-        columns: ds.metadata?.columns || []
-      }))
-    });
-
-    return validSelectedSources.flatMap(sourceId => {
+    const validDataSourceIds = new Set(
+      dataSources.map(ds => ds?.id).filter(id => typeof id === 'string' && id.length > 0)
+    );
+    
+    const cleanSelectedSources = selectedSources
+      .filter(id => typeof id === 'string' && id.length > 0 && validDataSourceIds.has(id))
+      .filter((id, index, arr) => arr.indexOf(id) === index);
+    
+    const columns: Array<{
+      sourceId: string;
+      sourceName: string;
+      columnName: string;
+    }> = [];
+    
+    for (const sourceId of cleanSelectedSources) {
       const source = dataSources.find(ds => ds.id === sourceId);
+      if (!source?.metadata?.columns || !Array.isArray(source.metadata.columns)) continue;
       
-      if (!source) {
-        console.warn(`Data source with ID ${sourceId} not found after filtering`);
-        return [];
+      for (const col of source.metadata.columns) {
+        if (typeof col === 'string' && col.length > 0) {
+          columns.push({
+            sourceId,
+            sourceName: source.name || 'Unknown',
+            columnName: col
+          });
+        }
       }
-      
-      if (!source.metadata || !source.metadata.columns || !Array.isArray(source.metadata.columns)) {
-        console.warn(`Data source ${source.name} has invalid or missing column metadata`, source.metadata);
-        return [];
-      }
-      
-      return source.metadata.columns.map(col => ({
-        sourceId,
-        sourceName: source.name,
-        columnName: col
-      }));
-    });
-  }, [selectedSources, dataSources]);
+    }
+    
+    return columns;
+  }, [dataSources, selectedSources]);
 
   const filteredColumns = useMemo(() => {
     let filtered = availableColumns;
-
-    // Apply search filter
+    
     if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
       filtered = filtered.filter(col => 
-        col.columnName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        col.sourceName.toLowerCase().includes(searchTerm.toLowerCase())
+        col.columnName.toLowerCase().includes(term) ||
+        col.sourceName.toLowerCase().includes(term)
       );
     }
-
-    // Apply type filter (simplified - in real implementation would check actual data types)
-    if (fieldFilter !== 'all') {
-      filtered = filtered.filter(col => {
-        const columnName = col.columnName.toLowerCase();
-        if (fieldFilter === 'number') {
-          return columnName.includes('amount') || columnName.includes('price') || 
-                 columnName.includes('cost') || columnName.includes('value') ||
-                 columnName.includes('total') || columnName.includes('sum') ||
-                 columnName.includes('count') || columnName.includes('qty');
-        } else if (fieldFilter === 'text') {
-          return !columnName.includes('amount') && !columnName.includes('price') && 
-                 !columnName.includes('cost') && !columnName.includes('value') &&
-                 !columnName.includes('total') && !columnName.includes('sum') &&
-                 !columnName.includes('count') && !columnName.includes('qty');
-        }
-        return true;
-      });
-    }
-
+    
     return filtered;
   }, [availableColumns, searchTerm, fieldFilter]);
 
-  // Handle initial configuration changes
+  // Initialize from initial configuration
   React.useEffect(() => {
     if (initialConfiguration && !isInitialized) {
       setRowFields(initialConfiguration.row_fields || []);
@@ -115,24 +96,18 @@ export const PivotConfiguration: React.FC<PivotConfigurationProps> = ({
     }
   }, [initialConfiguration, isInitialized]);
 
-  React.useEffect(() => {
-    const currentConfig = { rowFields, columnFields, valueFields };
-    
-    // Only call if we're initialized and have fields
-    if (isInitialized && (rowFields.length > 0 || columnFields.length > 0 || valueFields.length > 0)) {
-      onConfigurationChange(currentConfig);
+  // Manual configuration update function
+  const updateConfiguration = () => {
+    if (isInitialized) {
+      onConfigurationChange({ rowFields, columnFields, valueFields });
     }
-  }, [rowFields, columnFields, valueFields, isInitialized]);
+  };
 
   const addField = (sourceId: string, columnName: string, role: 'row' | 'column' | 'value') => {
-    // Check for duplicates
     const allFields = [...rowFields, ...columnFields, ...valueFields];
     const isDuplicate = allFields.some(f => f.source_id === sourceId && f.column_name === columnName);
     
-    if (isDuplicate) {
-      console.warn(`Field ${columnName} from ${sourceId} is already added to the pivot table`);
-      return;
-    }
+    if (isDuplicate) return;
 
     const field: PivotField = {
       source_id: sourceId,
@@ -142,475 +117,223 @@ export const PivotConfiguration: React.FC<PivotConfigurationProps> = ({
     };
 
     if (role === 'row') {
-      setRowFields([...rowFields, field]);
+      const newFields = [...rowFields, field];
+      setRowFields(newFields);
+      setTimeout(() => updateConfiguration(), 0);
     } else if (role === 'column') {
-      setColumnFields([...columnFields, field]);
+      const newFields = [...columnFields, field];
+      setColumnFields(newFields);
+      setTimeout(() => updateConfiguration(), 0);
     } else {
-      setValueFields([...valueFields, field]);
+      const newFields = [...valueFields, field];
+      setValueFields(newFields);
+      setTimeout(() => updateConfiguration(), 0);
     }
   };
 
   const removeField = (role: 'row' | 'column' | 'value', index: number) => {
     if (role === 'row') {
-      setRowFields(rowFields.filter((_, i) => i !== index));
+      const newFields = rowFields.filter((_, i) => i !== index);
+      setRowFields(newFields);
+      setTimeout(() => updateConfiguration(), 0);
     } else if (role === 'column') {
-      setColumnFields(columnFields.filter((_, i) => i !== index));
+      const newFields = columnFields.filter((_, i) => i !== index);
+      setColumnFields(newFields);
+      setTimeout(() => updateConfiguration(), 0);
     } else {
-      setValueFields(valueFields.filter((_, i) => i !== index));
+      const newFields = valueFields.filter((_, i) => i !== index);
+      setValueFields(newFields);
+      setTimeout(() => updateConfiguration(), 0);
     }
   };
 
   const savePreset = async () => {
     if (!presetName.trim()) return;
     
-    const configuration = {
-      row_fields: rowFields,
-      column_fields: columnFields,
-      value_fields: valueFields
-    };
-
     try {
-      const response = await createPivotPreset({
+      const pivotTable: PivotTableDefinition = {
+        id: `pivot_${Date.now()}`,
         name: presetName,
-        description: `Saved on ${new Date().toLocaleDateString()}`,
-        label_id: 'default', // In real implementation, would get from selected label
-        pivot_tables: [{
-          id: `pivot_${Date.now()}`,
-          name: presetName,
-          description: `Saved on ${new Date().toLocaleDateString()}`,
-          configuration,
-          sheet_name: presetName.replace(/\s+/g, '_'),
-          position: { row: 1, column: 1 },
-          created_at: new Date().toISOString()
-        }],
-        excel_structure: {
-          sheets: [],
-          layout: 'separate_sheets',
-          include_raw_data: true,
-          include_summary: true
+        description: '',
+        configuration: {
+          row_fields: rowFields,
+          column_fields: columnFields,
+          value_fields: valueFields
         },
-        tags: [],
-        is_public: false
-      });
+        sheet_name: 'PivotSheet1',
+        position: {
+          row: 0,
+          column: 0
+        },
+        created_at: new Date().toISOString()
+      };
 
-      if (response.success && response.data) {
-        setPresets([...presets, response.data]);
-        setPresetName('');
-        alert('Preset saved successfully!');
-      }
+      const preset: Partial<PivotPreset> = {
+        name: presetName,
+        description: `Preset with ${rowFields.length} rows, ${columnFields.length} columns, ${valueFields.length} values`,
+        pivot_tables: [pivotTable]
+      };
+      
+      await createPivotPreset(preset);
+      setPresetName('');
+      setShowPresets(false);
     } catch (error) {
       console.error('Failed to save preset:', error);
-      alert('Failed to save preset. Please try again.');
     }
   };
 
-  const loadPreset = (preset: PivotPreset) => {
-    const firstPivotTable = preset.pivot_tables[0];
-    if (firstPivotTable) {
-      setRowFields(firstPivotTable.configuration.row_fields || []);
-      setColumnFields(firstPivotTable.configuration.column_fields || []);
-      setValueFields(firstPivotTable.configuration.value_fields || []);
-    }
-    setShowPresets(false);
-  };
+  const renderFieldList = (fields: PivotField[], role: 'row' | 'column' | 'value', title: string) => (
+    <div className="mb-4">
+      <h4 className="text-sm font-medium text-gray-700 mb-2">{title}</h4>
+      <div 
+        className={`min-h-[60px] p-3 border-2 border-dashed rounded-lg transition-colors ${
+          dragTarget === role ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
+        }`}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragTarget(role);
+        }}
+        onDragLeave={() => setDragTarget(null)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragTarget(null);
+          const data = e.dataTransfer.getData('text/plain');
+          try {
+            const { sourceId, columnName } = JSON.parse(data);
+            addField(sourceId, columnName, role);
+          } catch (error) {
+            console.error('Failed to parse drag data:', error);
+          }
+        }}
+      >
+        {fields.length === 0 ? (
+          <p className="text-gray-500 text-sm">Drop fields here or click + to add</p>
+        ) : (
+          <div className="space-y-1">
+            {fields.map((field, index) => (
+              <div key={index} className="flex items-center justify-between bg-gray-50 p-2 rounded">
+                <span className="text-sm">
+                  {field.column_name}
+                  {field.aggregation && ` (${field.aggregation})`}
+                </span>
+                <button
+                  onClick={() => removeField(role, index)}
+                  className="text-red-500 hover:text-red-700"
+                >
+                  <XMarkIcon className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
-      <h3 className="text-lg font-medium text-gray-900">Configure Pivot Table</h3>
-      
-      {/* Debug Information */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="bg-gray-100 border border-gray-300 rounded-lg p-3 text-xs">
-          <h4 className="font-semibold text-gray-700 mb-2">Debug Info:</h4>
-          <div className="space-y-1">
-            <div><strong>Selected Sources:</strong> {selectedSources.length} ({selectedSources.join(', ')})</div>
-            <div><strong>Available Data Sources:</strong> {dataSources.length}</div>
-            <div><strong>Available Columns:</strong> {availableColumns.length}</div>
-            {availableColumns.length === 0 && selectedSources.length > 0 && (
-              <div className="text-red-600"><strong>Warning:</strong> No columns found for selected sources</div>
-            )}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Available Fields */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-medium text-gray-900">Available Fields</h3>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setShowPresets(!showPresets)}
+                className="p-2 text-gray-400 hover:text-blue-600 rounded transition-colors"
+                title="Manage Presets"
+              >
+                <BookmarkIcon className="h-5 w-5" />
+              </button>
+            </div>
           </div>
-        </div>
-      )}
-      
-      {/* Available Columns with Search */}
-      <div className="bg-gray-50 rounded-lg p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h4 className="text-sm font-medium text-gray-700">Available Columns</h4>
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => setShowPresets(!showPresets)}
-              className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100"
-            >
-              <BookmarkIcon className="h-3 w-3 mr-1" />
-              Presets
-            </button>
-            <span className="text-xs text-gray-500">
-              {filteredColumns.length} columns
-            </span>
-          </div>
-        </div>
-        
-        {/* Search and Filter */}
-        <div className="flex items-center space-x-2 mb-3">
-          <div className="relative flex-1">
+
+          {/* Search */}
+          <div className="relative">
             <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input
               type="text"
-              placeholder="Search columns..."
+              placeholder="Search fields..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm w-full"
+              className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
-          <select
-            value={fieldFilter}
-            onChange={(e) => setFieldFilter(e.target.value as 'all' | 'text' | 'number')}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-          >
-            <option value="all">All Fields</option>
-            <option value="text">Text Fields</option>
-            <option value="number">Number Fields</option>
-          </select>
-        </div>
 
-        {/* Presets Section */}
-        {showPresets && (
-          <div className="mb-4 p-3 bg-white border border-gray-200 rounded-lg">
-            <h5 className="text-sm font-medium text-gray-700 mb-2">Saved Presets</h5>
-            <div className="space-y-2">
-              {presets.map((preset) => (
-                <div
-                  key={preset.id}
-                  className="flex items-center justify-between p-2 bg-gray-50 rounded"
-                >
-                  <div>
-                    <div className="text-sm font-medium text-gray-900">{preset.name}</div>
-                    <div className="text-xs text-gray-500">{preset.description}</div>
-                  </div>
-                  <button
-                    onClick={() => loadPreset(preset)}
-                    className="px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 rounded hover:bg-blue-100"
-                  >
-                    Load
-                  </button>
-                </div>
-              ))}
-              {presets.length === 0 && (
-                <p className="text-sm text-gray-500">No presets saved yet</p>
-              )}
-            </div>
-            
-            {/* Save Current Configuration */}
-            <div className="mt-3 pt-3 border-t border-gray-200">
-              <div className="flex items-center space-x-2">
-                <input
-                  type="text"
-                  placeholder="Preset name..."
-                  value={presetName}
-                  onChange={(e) => setPresetName(e.target.value)}
-                  className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
-                />
-                <button
-                  onClick={savePreset}
-                  disabled={!presetName.trim() || (rowFields.length === 0 && columnFields.length === 0 && valueFields.length === 0)}
-                  className="px-3 py-1 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Save
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {filteredColumns.length > 0 ? (
-          <div className="grid grid-cols-3 gap-2 max-h-60 overflow-y-auto">
-            {filteredColumns.map((col, index) => {
-              const allFields = [...rowFields, ...columnFields, ...valueFields];
-              const isUsed = allFields.some(f => f.source_id === col.sourceId && f.column_name === col.columnName);
-              
-              return (
+          {/* Field List */}
+          <div className="space-y-2 max-h-80 overflow-y-auto">
+            {filteredColumns.map((column, index) => (
               <div
-                key={`${col.sourceId}-${col.columnName}-${index}`}
-                className="group relative"
-                draggable={!isUsed}
+                key={`${column.sourceId}-${column.columnName}-${index}`}
+                draggable
                 onDragStart={(e) => {
-                  if (isUsed) {
-                    e.preventDefault();
-                    return;
-                  }
-                  e.dataTransfer.setData('application/json', JSON.stringify({
-                    sourceId: col.sourceId,
-                    columnName: col.columnName,
-                    sourceName: col.sourceName
+                  e.dataTransfer.setData('text/plain', JSON.stringify({
+                    sourceId: column.sourceId,
+                    columnName: column.columnName
                   }));
                 }}
+                className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 cursor-move"
               >
-                <div className={`p-2 border rounded text-sm transition-all ${
-                  isUsed 
-                    ? 'bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed' 
-                    : 'bg-white border-gray-200 cursor-move hover:shadow-md'
-                }`}>
-                  <div className="font-medium truncate flex items-center">
-                    {col.columnName}
-                    {isUsed && <span className="ml-1 text-xs">✓</span>}
-                  </div>
-                  <div className="text-xs text-gray-500">{col.sourceName}</div>
-                </div>
-                
-                {/* Quick Add Buttons */}
-                {!isUsed && (
-                  <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <div className="flex space-x-1">
-                      <button
-                        onClick={() => addField(col.sourceId, col.columnName, 'row')}
-                        className="p-1 bg-blue-100 hover:bg-blue-200 rounded text-xs"
-                        title="Add to Rows"
-                      >
-                        R
-                      </button>
-                      <button
-                        onClick={() => addField(col.sourceId, col.columnName, 'column')}
-                        className="p-1 bg-green-100 hover:bg-green-200 rounded text-xs"
-                        title="Add to Columns"
-                      >
-                        C
-                      </button>
-                      <button
-                        onClick={() => addField(col.sourceId, col.columnName, 'value')}
-                        className="p-1 bg-yellow-100 hover:bg-yellow-200 rounded text-xs"
-                        title="Add to Values"
-                      >
-                        V
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="text-center py-8 border-2 border-dashed border-gray-300 rounded-lg bg-white">
-            <div className="text-gray-400 text-sm">
-              {selectedSources.length === 0 ? (
                 <div>
-                  <p className="font-medium">No data sources selected</p>
-                  <p className="mt-1">Select data sources from the previous step to see available columns</p>
+                  <div className="font-medium text-sm">{column.columnName}</div>
+                  <div className="text-xs text-gray-500">{column.sourceName}</div>
                 </div>
-              ) : availableColumns.length === 0 ? (
-                <div>
-                  <p className="font-medium">No columns available</p>
-                  <p className="mt-1">The selected data sources don't have column metadata available</p>
-                  <p className="mt-1 text-xs">Check the debug info above for more details</p>
-                </div>
-              ) : (
-                <div>
-                  <p className="font-medium">No columns match your filters</p>
-                  <p className="mt-1">Try adjusting your search or filter settings</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Pivot Configuration Areas */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Row Fields */}
-        <div className="space-y-3">
-          <h4 className="text-sm font-medium text-gray-700">Row Fields</h4>
-          <div 
-            className={`min-h-24 p-3 border-2 border-dashed rounded-lg transition-colors ${
-              dragTarget === 'row' 
-                ? 'border-blue-400 bg-blue-100' 
-                : 'border-blue-200 bg-blue-50'
-            }`}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragTarget(null);
-              try {
-                const data = JSON.parse(e.dataTransfer.getData('application/json'));
-                addField(data.sourceId, data.columnName, 'row');
-              } catch (error) {
-                console.error('Error parsing dropped data:', error);
-              }
-            }}
-            onDragOver={(e) => e.preventDefault()}
-            onDragEnter={(e) => {
-              e.preventDefault();
-              setDragTarget('row');
-            }}
-            onDragLeave={(e) => {
-              e.preventDefault();
-              setDragTarget(null);
-            }}
-          >
-            {rowFields.map((field, index) => (
-              <div key={index} className="flex items-center justify-between p-2 bg-white border rounded mb-2 shadow-sm">
-                <div className="flex-1">
-                  <span className="text-sm font-medium">{field.column_name}</span>
-                  <div className="text-xs text-gray-500">
-                    {dataSources.find(ds => ds.id === field.source_id)?.name || field.source_id}
-                  </div>
-                </div>
-                <button
-                  onClick={() => removeField('row', index)}
-                  className="text-red-500 hover:text-red-700 p-1"
-                  title="Remove field"
-                >
-                  <XMarkIcon className="h-4 w-4" />
-                </button>
-              </div>
-            ))}
-            {rowFields.length === 0 && (
-              <div className="text-center py-4 text-gray-500 text-sm">
-                <div className="mb-2">📊 Row Fields</div>
-                <div>Drag columns here or use quick add buttons (R)</div>
-                <div className="text-xs mt-1">Rows group your data vertically</div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Column Fields */}
-        <div className="space-y-3">
-          <h4 className="text-sm font-medium text-gray-700">Column Fields</h4>
-          <div 
-            className={`min-h-24 p-3 border-2 border-dashed rounded-lg transition-colors ${
-              dragTarget === 'column' 
-                ? 'border-green-400 bg-green-100' 
-                : 'border-green-200 bg-green-50'
-            }`}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragTarget(null);
-              try {
-                const data = JSON.parse(e.dataTransfer.getData('application/json'));
-                addField(data.sourceId, data.columnName, 'column');
-              } catch (error) {
-                console.error('Error parsing dropped data:', error);
-              }
-            }}
-            onDragOver={(e) => e.preventDefault()}
-            onDragEnter={(e) => {
-              e.preventDefault();
-              setDragTarget('column');
-            }}
-            onDragLeave={(e) => {
-              e.preventDefault();
-              setDragTarget(null);
-            }}
-          >
-            {columnFields.map((field, index) => (
-              <div key={index} className="flex items-center justify-between p-2 bg-white border rounded mb-2 shadow-sm">
-                <div className="flex-1">
-                  <span className="text-sm font-medium">{field.column_name}</span>
-                  <div className="text-xs text-gray-500">
-                    {dataSources.find(ds => ds.id === field.source_id)?.name || field.source_id}
-                  </div>
-                </div>
-                <button
-                  onClick={() => removeField('column', index)}
-                  className="text-red-500 hover:text-red-700 p-1"
-                  title="Remove field"
-                >
-                  <XMarkIcon className="h-4 w-4" />
-                </button>
-              </div>
-            ))}
-            {columnFields.length === 0 && (
-              <div className="text-center py-4 text-gray-500 text-sm">
-                <div className="mb-2">📋 Column Fields</div>
-                <div>Drag columns here or use quick add buttons (C)</div>
-                <div className="text-xs mt-1">Columns group your data horizontally</div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Value Fields */}
-        <div className="space-y-3">
-          <h4 className="text-sm font-medium text-gray-700">Value Fields</h4>
-          <div 
-            className={`min-h-24 p-3 border-2 border-dashed rounded-lg transition-colors ${
-              dragTarget === 'value' 
-                ? 'border-yellow-400 bg-yellow-100' 
-                : 'border-yellow-200 bg-yellow-50'
-            }`}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragTarget(null);
-              try {
-                const data = JSON.parse(e.dataTransfer.getData('application/json'));
-                addField(data.sourceId, data.columnName, 'value');
-              } catch (error) {
-                console.error('Error parsing dropped data:', error);
-              }
-            }}
-            onDragOver={(e) => e.preventDefault()}
-            onDragEnter={(e) => {
-              e.preventDefault();
-              setDragTarget('value');
-            }}
-            onDragLeave={(e) => {
-              e.preventDefault();
-              setDragTarget(null);
-            }}
-          >
-            {valueFields.map((field, index) => (
-              <div key={index} className="space-y-2 p-2 bg-white border rounded mb-2 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <span className="text-sm font-medium">{field.column_name}</span>
-                    <div className="text-xs text-gray-500">
-                      {dataSources.find(ds => ds.id === field.source_id)?.name || field.source_id}
-                    </div>
-                  </div>
+                <div className="flex space-x-1">
                   <button
-                    onClick={() => removeField('value', index)}
-                    className="text-red-500 hover:text-red-700 p-1"
-                    title="Remove field"
+                    onClick={() => addField(column.sourceId, column.columnName, 'row')}
+                    className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                    title="Add to Rows"
                   >
-                    <XMarkIcon className="h-4 w-4" />
+                    R
+                  </button>
+                  <button
+                    onClick={() => addField(column.sourceId, column.columnName, 'column')}
+                    className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200"
+                    title="Add to Columns"
+                  >
+                    C
+                  </button>
+                  <button
+                    onClick={() => addField(column.sourceId, column.columnName, 'value')}
+                    className="px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
+                    title="Add to Values"
+                  >
+                    V
                   </button>
                 </div>
-                <select
-                  value={field.aggregation || 'sum'}
-                  onChange={(e) => {
-                    const newFields = [...valueFields];
-                    newFields[index].aggregation = e.target.value as any;
-                    setValueFields(newFields);
-                  }}
-                  className="w-full text-xs border border-gray-300 rounded px-2 py-1 bg-white"
-                >
-                  <option value="sum">Sum</option>
-                  <option value="count">Count</option>
-                  <option value="mean">Average</option>
-                  <option value="min">Minimum</option>
-                  <option value="max">Maximum</option>
-                </select>
               </div>
             ))}
-            {valueFields.length === 0 && (
-              <div className="text-center py-4 text-gray-500 text-sm">
-                <div className="mb-2">🔢 Value Fields</div>
-                <div>Drag columns here or use quick add buttons (V)</div>
-                <div className="text-xs mt-1">Values are the numeric data to calculate</div>
-              </div>
-            )}
           </div>
+        </div>
+
+        {/* Pivot Configuration */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-medium text-gray-900">Pivot Table Configuration</h3>
+          
+          {renderFieldList(rowFields, 'row', 'Rows')}
+          {renderFieldList(columnFields, 'column', 'Columns')}
+          {renderFieldList(valueFields, 'value', 'Values')}
         </div>
       </div>
 
-      {/* Configuration Summary */}
-      {(rowFields.length > 0 || columnFields.length > 0 || valueFields.length > 0) && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <h4 className="text-sm font-medium text-blue-800 mb-2">Pivot Configuration</h4>
-          <div className="text-sm text-blue-700">
-            <div>Rows: {rowFields.length > 0 ? rowFields.map(f => f.column_name).join(', ') : 'None'}</div>
-            <div>Columns: {columnFields.length > 0 ? columnFields.map(f => f.column_name).join(', ') : 'None'}</div>
-            <div>Values: {valueFields.length > 0 ? valueFields.map(f => `${f.column_name} (${f.aggregation})`).join(', ') : 'None'}</div>
+      {/* Preset Management */}
+      {showPresets && (
+        <div className="bg-gray-50 p-4 rounded-lg">
+          <div className="flex items-center space-x-2 mb-4">
+            <input
+              type="text"
+              placeholder="Preset name..."
+              value={presetName}
+              onChange={(e) => setPresetName(e.target.value)}
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            />
+            <button
+              onClick={savePreset}
+              disabled={!presetName.trim()}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-300"
+            >
+              Save
+            </button>
           </div>
         </div>
       )}

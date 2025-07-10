@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Clear Storage</title>
+</head>
+<body>
+    <h1>Clearing localStorage...</h1>
+    <script>
+        // Clear all localStorage data
+        localStorage.clear();
+        sessionStorage.clear();
+        
+        // Show confirmation
+        document.body.innerHTML += '<p>✅ localStorage cleared successfully!</p>';
+        document.body.innerHTML += '<p>✅ sessionStorage cleared successfully!</p>';
+        document.body.innerHTML += '<p>Please go back to your application and refresh the page.</p>';
+        
+        console.log('Storage cleared successfully');
+    </script>
+</body>
+</html>
