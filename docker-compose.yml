@@ -10,7 +10,7 @@ services:
       - POSTGRES_PASSWORD=app_password
       - PGDATA=/var/lib/postgresql/data/pgdata
     ports:
-      - "5432:5432"
+      - "5433:5432"
     networks:
       - app-network
     volumes:
@@ -27,7 +27,7 @@ services:
     container_name: excel2ppt-redis
     command: redis-server --appendonly yes
     ports:
-      - "6379:6379"
+      - "6380:6379"
     networks:
       - app-network
     volumes:

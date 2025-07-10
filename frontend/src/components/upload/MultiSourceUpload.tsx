@@ -20,6 +20,11 @@ export const MultiSourceUpload: React.FC<MultiSourceUploadProps> = ({
   maxSources = 5,
   allowedTypes = ['.xlsx', '.csv', '.json']
 }) => {
+  // Debug: Log if we receive duplicate data sources
+  const uniqueIds = new Set(dataSources.map(ds => ds.id));
+  if (uniqueIds.size !== dataSources.length) {
+    console.warn('MultiSourceUpload received duplicate data sources:', dataSources.map(ds => ds.id));
+  }
   const [uploading, setUploading] = useState<Set<string>>(new Set());
   const [uploadErrors, setUploadErrors] = useState<Record<string, string>>({});
   const [labels, setLabels] = useState<DataSourceLabel[]>([]);
@@ -94,10 +99,10 @@ export const MultiSourceUpload: React.FC<MultiSourceUploadProps> = ({
         };
         // Use the same update mechanism as the store to avoid duplicates
         console.log('Updating data source with label:', dataSource.id);
+        console.log('Current dataSources:', dataSources.map(ds => ds.id));
         onDataSourceAdded(updatedDataSource);
         
         setShowLabelDialog(null);
-        alert('Label assigned successfully!');
       } else {
         throw new Error(response.error || 'Failed to assign label');
       }

@@ -60,8 +60,9 @@ function App() {
   
   // Multi-source upload handlers
   const handleDataSourceAdded = useCallback((dataSource: DataSource) => {
+    console.log('App: Adding/updating data source:', dataSource.id, 'Current sources:', dataSources.map(ds => ds.id));
     addDataSource(dataSource);
-  }, [addDataSource]);
+  }, [addDataSource, dataSources]);
   
   const handleDataSourceRemoved = useCallback((sourceId: string) => {
     removeDataSource(sourceId);
