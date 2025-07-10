@@ -169,9 +169,12 @@ export const PivotTableManager: React.FC<PivotTableManagerProps> = ({
   };
 
   const hasConfiguration = (pivot: PivotTableDefinition) => {
-    return pivot.configuration.row_fields.length > 0 || 
-           pivot.configuration.column_fields.length > 0 || 
-           pivot.configuration.value_fields.length > 0;
+    if (!pivot.configuration) {
+      return false;
+    }
+    return (pivot.configuration.row_fields?.length || 0) > 0 || 
+           (pivot.configuration.column_fields?.length || 0) > 0 || 
+           (pivot.configuration.value_fields?.length || 0) > 0;
   };
 
   if (isConfiguring && editingPivot) {
@@ -284,13 +287,13 @@ export const PivotTableManager: React.FC<PivotTableManagerProps> = ({
                 <div className="mt-3 text-xs text-gray-500">
                   <div className="flex items-center space-x-4">
                     <span>
-                      Rows: {pivot.configuration.row_fields.length}
+                      Rows: {pivot.configuration?.row_fields?.length || 0}
                     </span>
                     <span>
-                      Columns: {pivot.configuration.column_fields.length}
+                      Columns: {pivot.configuration?.column_fields?.length || 0}
                     </span>
                     <span>
-                      Values: {pivot.configuration.value_fields.length}
+                      Values: {pivot.configuration?.value_fields?.length || 0}
                     </span>
                   </div>
                 </div>
