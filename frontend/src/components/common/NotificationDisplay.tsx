@@ -26,7 +26,7 @@ export const NotificationDisplay: React.FC = () => {
   };
 
   const getNotificationClasses = (type: string) => {
-    const baseClasses = "max-w-sm w-full bg-white shadow-lg rounded-lg pointer-events-auto ring-1 ring-black ring-opacity-5 overflow-hidden";
+    const baseClasses = "max-w-xs sm:max-w-sm w-full bg-white shadow-lg rounded-lg pointer-events-auto ring-1 ring-black ring-opacity-5 overflow-hidden";
     
     switch (type) {
       case 'success':
@@ -63,33 +63,33 @@ export const NotificationDisplay: React.FC = () => {
   }
 
   return (
-    <div className="fixed inset-0 flex items-end justify-center px-4 py-6 pointer-events-none sm:p-6 sm:items-start sm:justify-end z-50">
-      <div className="flex flex-col space-y-4">
+    <div className="fixed inset-0 flex items-end justify-center px-2 py-4 pointer-events-none sm:px-4 sm:py-6 sm:items-start sm:justify-end z-50">
+      <div className="flex flex-col space-y-2 sm:space-y-4 w-full max-w-xs sm:max-w-sm">
         {notifications.map((notification) => (
           <div
             key={notification.id}
             className={`transform transition-all duration-300 ease-in-out ${getNotificationClasses(notification.type)}`}
           >
-            <div className="p-4">
+            <div className="p-3 sm:p-4">
               <div className="flex items-start">
                 <div className="flex-shrink-0">
                   {getIcon(notification.type)}
                 </div>
-                <div className="ml-3 w-0 flex-1 pt-0.5">
-                  <p className="text-sm font-medium text-gray-900">
+                <div className="ml-2 sm:ml-3 w-0 flex-1 pt-0.5">
+                  <p className="text-xs sm:text-sm font-medium text-gray-900 break-words">
                     {notification.title}
                   </p>
-                  <p className="mt-1 text-sm text-gray-500">
+                  <p className="mt-1 text-xs sm:text-sm text-gray-500 break-words">
                     {notification.message}
                   </p>
                 </div>
-                <div className="ml-4 flex-shrink-0 flex">
+                <div className="ml-2 sm:ml-4 flex-shrink-0 flex">
                   <button
                     className="bg-white rounded-md inline-flex text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                     onClick={() => removeNotification(notification.id)}
                   >
                     <span className="sr-only">Close</span>
-                    <XMarkIcon className="h-5 w-5" />
+                    <XMarkIcon className="h-4 w-4 sm:h-5 sm:w-5" />
                   </button>
                 </div>
               </div>

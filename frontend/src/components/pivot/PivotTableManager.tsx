@@ -11,7 +11,7 @@ import {
 import { PivotTableDefinition, DataSource, PivotPreset, ExcelFilePreview } from '../../types';
 import { PivotConfiguration } from './PivotConfiguration';
 import { useNotificationStore, usePivotStore } from '../../stores/appStore';
-import { generateExcelFromPreset } from '../../services/api';
+import { generateExcelFromPreset, createPivotPreset } from '../../services/api';
 
 interface PivotTableManagerProps {
   dataSources: DataSource[];
@@ -321,18 +321,74 @@ export const PivotTableManager: React.FC<PivotTableManagerProps> = ({
   };
 
   const generateExcelPreview = async () => {
-    if (!preset) {
+    console.log('=== generateExcelPreview called ===');
+    console.log('pivotTables:', pivotTables);
+    console.log('selectedSources:', selectedSources);
+    console.log('preset:', preset);
+    
+    // Check if we have any configured pivot tables
+    const configuredPivots = pivotTables.filter(pivot => hasConfiguration(pivot));
+    console.log('configuredPivots:', configuredPivots);
+    
+    if (configuredPivots.length === 0) {
+      console.log('No configured pivots found');
       addNotification({
-        type: 'error',
-        title: 'No Preset Selected',
-        message: 'Please select or create a preset first'
+        type: 'warning',
+        title: 'No Pivot Tables Configured',
+        message: 'Please configure at least one pivot table with fields before generating a preview'
+      });
+      return;
+    }
+
+    if (selectedSources.length === 0) {
+      console.log('No selected sources found');
+      addNotification({
+        type: 'warning',
+        title: 'No Data Sources Selected',
+        message: 'Please select data sources in the Data Sources tab first'
       });
       return;
     }
 
     setGeneratingPreview(true);
     try {
-      const response = await generateExcelFromPreset(preset.id, selectedSources);
+      // If we have a preset, use it; otherwise create a temporary one from current pivot tables
+      let response;
+      
+      if (preset) {
+        console.log('Using existing preset:', preset.id);
+        response = await generateExcelFromPreset(preset.id, selectedSources);
+      } else {
+        console.log('Creating temporary preset...');
+        // Create a temporary preset from current configuration and use it
+        const tempPreset = {
+          id: `temp_${Date.now()}`,
+          name: 'Temporary Preview',
+          description: 'Temporary preset for preview generation',
+          pivot_tables: configuredPivots,
+          created_at: new Date().toISOString()
+        };
+        
+        console.log('tempPreset:', tempPreset);
+        
+        // Use the existing API by creating a temporary preset
+        try {
+          const createResponse = await createPivotPreset(tempPreset);
+          console.log('createResponse:', createResponse);
+          if (createResponse.success && createResponse.data) {
+            console.log('Temporary preset created successfully:', createResponse.data.id);
+            response = await generateExcelFromPreset(createResponse.data.id, selectedSources);
+          } else {
+            console.error('Failed to create temporary preset:', createResponse);
+            throw new Error('Failed to create temporary preset');
+          }
+        } catch (presetError) {
+          console.error('Error creating temporary preset:', presetError);
+          throw new Error('Failed to create temporary preset for preview');
+        }
+      }
+      
+      console.log('generateExcelFromPreset response:', response);
       
       if (response.success && response.data) {
         onPreviewGenerated(response.data);
@@ -342,9 +398,11 @@ export const PivotTableManager: React.FC<PivotTableManagerProps> = ({
           message: `Preview created with ${response.data.sheets.length} sheets`
         });
       } else {
+        console.error('generateExcelFromPreset failed:', response);
         throw new Error(response.error || 'Failed to generate preview');
       }
     } catch (error) {
+      console.error('Error in generateExcelPreview:', error);
       addNotification({
         type: 'error',
         title: 'Preview Generation Failed',
@@ -462,6 +520,7 @@ export const PivotTableManager: React.FC<PivotTableManagerProps> = ({
               onClick={generateExcelPreview}
               disabled={generatingPreview || selectedSources.length === 0}
               className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Generate Excel preview from configured pivot tables (no preset required)"
             >
               {generatingPreview ? (
                 <>
