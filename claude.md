@@ -91,36 +91,56 @@ Create a web app that:
 ### Recent Fixes and Improvements:
 
 #### Fixed Issues (Latest Updates):
-1. **Preset Creation Frequency Error**: 
+1. **Column Header Extraction and Preservation**:
+   - **CRITICAL FIX**: Resolved column names showing as A, B, C instead of actual header names
+   - Implemented intelligent header detection that analyzes all sheets in Excel files
+   - Added smart sheet selection algorithm that prioritizes sheets with meaningful headers
+   - Enhanced header extraction to handle various Excel layouts and merged cells
+   - Fixed issue where first sheet's headers were used regardless of quality
+   - Now correctly extracts and displays original column names like "LOB", "ETP Name", "Status"
+
+2. **Intelligent Multi-Sheet Processing**:
+   - Added comprehensive analysis of all Excel sheets to find best available headers
+   - Implemented fallback logic that only uses Excel column letters (A, B, C) as last resort
+   - Enhanced debug logging to trace header extraction process
+   - Fixed backend logic to select sheets with >50% meaningful headers over generic ones
+
+3. **Excel Processing Dependencies**:
+   - Resolved missing openpyxl dependency issues causing import errors
+   - Fixed backend crashes related to Excel file processing
+   - Enhanced error handling for malformed Excel files
+   - Added proper dependency management for production deployment
+
+4. **Preset Creation Frequency Error**: 
    - Fixed duplicate preset creation that was causing 500 errors
    - Improved validation to prevent redundant preset generation
    - Enhanced error handling for preset management
 
-2. **Excel Generation with Actual Pivot Tables**:
-   - Implemented proper pandas pivot table generation
+5. **Excel Generation with Actual Pivot Tables**:
+   - Implemented proper pandas pivot table generation using openpyxl
    - Fixed Excel export to include actual pivot table objects, not just formatted data
    - Added support for multiple pivot tables in single Excel file
    - Improved data aggregation and summarization
 
-3. **Notification System Improvements**:
+6. **Notification System Improvements**:
    - Fixed notification scaling and positioning issues
    - Improved notification timeout and auto-dismiss functionality
    - Enhanced notification styling for better readability
    - Added proper notification state management
 
-4. **Comprehensive Debugging System**:
+7. **Comprehensive Debugging System**:
    - Added extensive logging throughout the application
    - Implemented debug endpoints for testing and troubleshooting
    - Enhanced error messages with detailed context
    - Added performance monitoring and timing metrics
 
-5. **Pivot Table Field List Editor**:
+8. **Pivot Table Field List Editor**:
    - Fixed field list population issues
    - Improved drag-and-drop functionality
    - Enhanced field validation and error handling
    - Fixed null checks and configuration validation
 
-6. **Duplicate Component Rendering**:
+9. **Duplicate Component Rendering**:
    - Fixed MultiSourceUpload component duplicate rendering
    - Improved React key management and component lifecycle
    - Enhanced state management to prevent duplicate renders

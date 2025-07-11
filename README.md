@@ -5,14 +5,18 @@ A comprehensive web application that converts Excel workbooks into perfectly for
 ## ✨ Recent Updates
 
 ### Latest Improvements (Current Version)
-- **Fixed Preset Creation Frequency Error**: Resolved duplicate preset creation causing server errors
-- **Enhanced Excel Generation**: Now generates actual Excel pivot tables using pandas, not just formatted data
-- **Improved Notification System**: Fixed scaling, positioning, and auto-dismiss functionality
-- **Comprehensive Debugging**: Added extensive logging and debug endpoints
-- **Fixed Pivot Table Field Editor**: Resolved field list population and drag-and-drop issues
-- **Eliminated Duplicate Rendering**: Fixed MultiSourceUpload component rendering duplicates
-- **Enhanced Error Handling**: Better validation and user-friendly error messages
-- **Performance Optimizations**: Improved memory usage and processing speed
+- **🔥 CRITICAL FIX: Column Header Preservation**: Resolved major issue where column names showed as A, B, C instead of actual header names like "LOB", "ETP Name", "Status"
+- **🧠 Intelligent Header Detection**: Implemented smart sheet analysis that prioritizes sheets with meaningful headers over generic Excel column letters
+- **🔧 Enhanced Excel Processing**: Fixed missing openpyxl dependencies and improved error handling for malformed Excel files
+- **📊 Multi-Sheet Processing**: Added comprehensive analysis of all Excel sheets to find best available headers automatically
+- **🐛 Fixed Preset Creation Frequency Error**: Resolved duplicate preset creation causing server errors
+- **📈 Enhanced Excel Generation**: Now generates actual Excel pivot tables using openpyxl, not just formatted data
+- **🔔 Improved Notification System**: Fixed scaling, positioning, and auto-dismiss functionality
+- **🐞 Comprehensive Debugging**: Added extensive logging and debug endpoints for header extraction tracing
+- **🎯 Fixed Pivot Table Field Editor**: Resolved field list population and drag-and-drop issues
+- **🚫 Eliminated Duplicate Rendering**: Fixed MultiSourceUpload component rendering duplicates
+- **⚡ Enhanced Error Handling**: Better validation and user-friendly error messages
+- **🚀 Performance Optimizations**: Improved memory usage and processing speed
 
 ### Current Feature Status
 - ✅ **Core Features**: Complete and fully functional
